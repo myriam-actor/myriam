@@ -23,7 +23,8 @@ pub trait Actor {
     ///
     /// You are NOT meant to implement this, only [Self::handle].
     ///
-    async fn spawn<T, U, E, Fut>(
+    async fn spawn<T, U, E>(
+        &'static self,
         opts: ActorOptions,
         auth: AuthHandle,
     ) -> Result<ActorHandle, SpawnError>
@@ -31,7 +32,6 @@ pub trait Actor {
         T: DeserializeOwned + Send + 'static,
         U: Serialize + Send + 'static,
         E: Serialize + Send + 'static,
-        Fut: Future<Output = Result<U, E>> + Send + 'static,
     {
         let address = match opts.port {
             Some(p) => Address::new_with_checked_port(&opts.host, p)?,
@@ -79,23 +79,21 @@ pub trait Actor {
                                     MessageType::Task(arg) => match message.context {
                                         MessageContext::NonYielding => {
                                             tokio::spawn(async move {
-                                                let _ = Self::handle::<T, U, E, Fut>(
-                                                    &context,
-                                                    message.sender,
-                                                    arg,
-                                                )
-                                                .await;
+                                                let _ = self
+                                                    .handle::<T, U, E>(
+                                                        &context,
+                                                        message.sender,
+                                                        arg,
+                                                    )
+                                                    .await;
                                             });
 
                                             let _ = tx.send(Ok(TaskResult::Accepted));
                                         }
                                         MessageContext::Yielding => {
-                                            match Self::handle::<T, U, E, Fut>(
-                                                &context,
-                                                message.sender,
-                                                arg,
-                                            )
-                                            .await
+                                            match self
+                                                .handle::<T, U, E>(&context, message.sender, arg)
+                                                .await
                                             {
                                                 Ok(res) => {
                                                     let _ = tx.send(Ok(TaskResult::Finished(res)));
@@ -131,12 +129,11 @@ pub trait Actor {
         Ok(ActorHandle { address })
     }
 
-    fn handle<T, U, E, Fut>(ctx: &Context, addr: Option<Address>, arg: T) -> Fut
+    async fn handle<T, U, E>(&self, ctx: &Context, addr: Option<Address>, arg: T) -> Result<U, E>
     where
         T: DeserializeOwned + Send + 'static,
         U: Serialize + Send + 'static,
-        E: Serialize + Send + 'static,
-        Fut: Future<Output = Result<U, E>> + Send + 'static;
+        E: Serialize + Send + 'static;
 }
 
 pub struct ActorHandle {
