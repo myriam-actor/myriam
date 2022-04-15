@@ -98,9 +98,6 @@ pub enum ReadError {
 
     #[error("failed to decode incoming message")]
     Decoding(#[from] std::boxed::Box<bincode::ErrorKind>),
-
-    #[error("public identity missing from store")]
-    Missing,
 }
 
 #[derive(Debug, Error)]
