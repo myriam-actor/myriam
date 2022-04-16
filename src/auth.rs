@@ -8,7 +8,7 @@ use crate::identity::{PublicIdentity, SelfIdentity};
 pub type IdentityStore = HashMap<String, Arc<PublicIdentity>>;
 pub type AddressStore = Vec<IpAddr>;
 
-trait AuthActor {
+pub trait AuthActor {
     /// Default implementation. Not really meant to be overriden.
     fn spawn(self_identity: SelfIdentity) -> AuthHandle {
         let (tx, mut rx) = mpsc::channel::<AuthCommand>(1024);
@@ -127,8 +127,8 @@ enum AuthCommand {
 
 #[derive(Debug)]
 pub struct AccessRequest {
-    address: IpAddr,
-    identity: PublicIdentity,
+    pub address: IpAddr,
+    pub identity: PublicIdentity,
 }
 
 impl AccessRequest {
@@ -198,7 +198,7 @@ mod tests {
 
         autho.store_identity(public_id.clone()).await.unwrap();
 
-        let x = autho
+        let _x = autho
             .resolve(AccessRequest {
                 address: addr,
                 identity: public_id.clone(),
@@ -206,6 +206,6 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(matches!(AccessResolution::Accepted, x));
+        assert!(matches!(AccessResolution::Accepted, _x));
     }
 }

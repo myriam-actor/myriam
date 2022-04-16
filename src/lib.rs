@@ -11,9 +11,90 @@ mod net;
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+    use async_trait::async_trait;
+    use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+    use crate::{
+        actors::{Actor, ActorOptions, Context},
+        address::Address,
+        auth::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore},
+        identity::SelfIdentity,
+        messaging::{MessageContext, MessageType, MessagingError, TaskResult},
+    };
+
+    struct Autho;
+    impl AuthActor for Autho {
+        fn handle(
+            request: AccessRequest,
+            _id_store: &IdentityStore,
+            _address_store: &AddressStore,
+        ) -> AccessResolution {
+            let addr = request.address.to_string();
+            if addr == "127.0.0.1" || addr == "::1" {
+                AccessResolution::Accepted
+            } else {
+                AccessResolution::Denied
+            }
+        }
+    }
+
+    #[derive(Serialize, Deserialize)]
+    struct SomeError;
+
+    struct MyActor;
+
+    #[async_trait]
+    impl Actor for MyActor {
+        type Input = String;
+        type Output = String;
+        type Error = SomeError;
+
+        async fn handle(
+            _ctx: &Context,
+            _addr: Option<Address>,
+            arg: Self::Input,
+        ) -> Result<Self::Output, Self::Error>
+        where
+            Self::Input: DeserializeOwned + Send + 'static,
+            Self::Output: Serialize + Send + 'static,
+            Self::Error: Serialize + Send + 'static,
+        {
+            if arg.is_empty() {
+                Err(SomeError)
+            } else {
+                Ok(arg.to_uppercase())
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn spawn_and_message() {
+        let actor_self_identity = SelfIdentity::new();
+        let actor_auth_handle = Autho::spawn(actor_self_identity);
+
+        let opts = ActorOptions {
+            host: "localhost".into(),
+            port: None,
+        };
+
+        let actor_handle = MyActor::spawn(opts, actor_auth_handle.clone())
+            .await
+            .unwrap();
+
+        let client_self_identity = SelfIdentity::new();
+        let client_auth_handle = Autho::spawn(client_self_identity);
+
+        let _response = actor_handle
+            .send::<String, String, SomeError>(
+                MessageType::Task("something".to_string()),
+                MessageContext::Yielding,
+                &client_auth_handle,
+            )
+            .await;
+
+        assert!(matches!(
+            Ok::<_, MessagingError<SomeError>>(TaskResult::Finished("SOMETHING")),
+            _response
+        ));
     }
 }

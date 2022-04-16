@@ -18,20 +18,20 @@ use crate::{
 
 #[async_trait]
 pub trait Actor {
+    type Input;
+    type Output;
+    type Error;
+
     ///
     /// Spawn an actor and return a handle to it.
     ///
     /// You are NOT meant to implement this, only [Self::handle].
     ///
-    async fn spawn<T, U, E>(
-        &'static self,
-        opts: ActorOptions,
-        auth: AuthHandle,
-    ) -> Result<ActorHandle, SpawnError>
+    async fn spawn(opts: ActorOptions, auth: AuthHandle) -> Result<ActorHandle, SpawnError>
     where
-        T: DeserializeOwned + Send + 'static,
-        U: Serialize + Send + 'static,
-        E: Serialize + Send + 'static,
+        Self::Input: DeserializeOwned + Send + 'static,
+        Self::Output: Serialize + Send + 'static,
+        Self::Error: Serialize + Send + 'static,
     {
         let address = match opts.port {
             Some(p) => Address::new_with_checked_port(&opts.host, p)?,
@@ -63,62 +63,53 @@ pub trait Actor {
 
                 tokio::spawn(async move {
                     let (rd, wr) = socket.split();
-                    match net::try_read_message::<Message<T>>(rd, &auth_handle, addr.ip()).await {
-                        Ok((message, identity)) => {
-                            let (tx, rx) = oneshot::channel::<MessageResult<U, E>>();
-                            tokio::spawn(async move {
-                                match message.message_type {
-                                    MessageType::Ping => {
-                                        let _ = tx.send(Ok(TaskResult::Accepted));
-                                    }
-                                    MessageType::Stop => {
-                                        let _ = stop_tx.send(());
-                                        let _ = tx.send(Ok(TaskResult::Accepted));
-                                    }
-                                    MessageType::Task(arg) => match message.context {
-                                        MessageContext::NonYielding => {
-                                            tokio::spawn(async move {
-                                                let _ = self
-                                                    .handle::<T, U, E>(
-                                                        &context,
-                                                        message.sender,
-                                                        arg,
-                                                    )
-                                                    .await;
-                                            });
+                    if let Ok((message, identity)) =
+                        net::try_read_message::<Message<Self::Input>>(rd, &auth_handle, addr.ip())
+                            .await
+                    {
+                        let (tx, rx) =
+                            oneshot::channel::<MessageResult<Self::Output, Self::Error>>();
+                        tokio::spawn(async move {
+                            match message.message_type {
+                                MessageType::Ping => {
+                                    let _ = tx.send(Ok(TaskResult::Accepted));
+                                }
+                                MessageType::Stop => {
+                                    let _ = stop_tx.send(());
+                                    let _ = tx.send(Ok(TaskResult::Accepted));
+                                }
+                                MessageType::Task(arg) => match message.context {
+                                    MessageContext::NonYielding => {
+                                        tokio::spawn(async move {
+                                            let _ =
+                                                Self::handle(&context, message.sender, arg).await;
+                                        });
 
-                                            let _ = tx.send(Ok(TaskResult::Accepted));
-                                        }
-                                        MessageContext::Yielding => {
-                                            match self
-                                                .handle::<T, U, E>(&context, message.sender, arg)
-                                                .await
-                                            {
-                                                Ok(res) => {
-                                                    let _ = tx.send(Ok(TaskResult::Finished(res)));
-                                                }
-                                                Err(err) => {
-                                                    let _ = tx.send(Err(MessagingError::Task(err)));
-                                                }
+                                        let _ = tx.send(Ok(TaskResult::Accepted));
+                                    }
+                                    MessageContext::Yielding => {
+                                        match Self::handle(&context, message.sender, arg).await {
+                                            Ok(res) => {
+                                                let _ = tx.send(Ok(TaskResult::Finished(res)));
+                                            }
+                                            Err(err) => {
+                                                let _ = tx.send(Err(MessagingError::Task(err)));
                                             }
                                         }
-                                    },
-                                }
-                            });
-
-                            let response = match rx.await {
-                                Ok(res) => res,
-                                Err(_) => return,
-                            };
-
-                            if let Err(e) =
-                                net::try_write_message(response, &identity, wr, self_identity).await
-                            {
-                                // TODO: log the failure and carry on, not much else we can do at this point
+                                    }
+                                },
                             }
-                        }
-                        Err(e) => {
-                            // TODO: log the failure and carry on
+                        });
+
+                        let response = match rx.await {
+                            Ok(res) => res,
+                            Err(_) => return,
+                        };
+
+                        if (net::try_write_message(response, &identity, wr, self_identity).await)
+                            .is_err()
+                        {
+                            // TODO: log the failure and carry on, not much else we can do at this point
                         }
                     }
                 });
@@ -131,11 +122,15 @@ pub trait Actor {
         })
     }
 
-    async fn handle<T, U, E>(&self, ctx: &Context, addr: Option<Address>, arg: T) -> Result<U, E>
+    async fn handle(
+        ctx: &Context,
+        addr: Option<Address>,
+        arg: Self::Input,
+    ) -> Result<Self::Output, Self::Error>
     where
-        T: DeserializeOwned + Send + 'static,
-        U: Serialize + Send + 'static,
-        E: Serialize + Send + 'static;
+        Self::Input: DeserializeOwned + Send + 'static,
+        Self::Output: Serialize + Send + 'static,
+        Self::Error: Serialize + Send + 'static;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -215,7 +210,7 @@ pub struct ActorOptions {
 
 #[derive(Clone)]
 pub struct Context {
-    self_address: Address,
+    pub self_address: Address,
 }
 
 #[derive(Debug, Error)]
