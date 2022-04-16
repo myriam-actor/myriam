@@ -15,7 +15,7 @@ use crate::crypto::KEY_BYTES;
 ///
 /// Encapsulates the identity (keys and hash) of an actor, or group of actors
 ///
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct SelfIdentity {
     public_identity: PublicIdentity,
     secret_key: SecretKey,

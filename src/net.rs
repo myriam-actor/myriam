@@ -1,4 +1,4 @@
-use std::net::IpAddr;
+use std::{net::IpAddr, sync::Arc};
 
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
@@ -11,17 +11,15 @@ use crate::{
     auth::{AccessRequest, AccessResolution, AuthError, AuthHandle},
     crypto::{self, DecryptionError, KEY_BYTES, NONCE_BYTES},
     identity::{PublicIdentity, SelfIdentity},
-    messaging::{Message, MessageResult},
 };
 
-pub async fn try_read_message<T>(
+pub async fn try_read_message<Message>(
     mut rd: ReadHalf<'_>,
     auth_handle: &AuthHandle,
     addr: IpAddr,
-    self_identity: &SelfIdentity,
-) -> Result<(Message<T>, PublicIdentity), ReadError>
+) -> Result<(Message, Arc<PublicIdentity>), ReadError>
 where
-    T: DeserializeOwned,
+    Message: DeserializeOwned,
 {
     let mut key_buffer: [u8; KEY_BYTES] = [0; KEY_BYTES];
     rd.read_exact(&mut key_buffer).await?;
@@ -48,11 +46,13 @@ where
     let mut cipher_buffer: Vec<u8> = vec![0; size as usize];
     rd.read_exact(cipher_buffer.as_mut_slice()).await?;
 
+    let self_identity = auth_handle.fetch_self_identity().await?;
+
     let message_bytes = crypto::try_decrypt(
         cipher_buffer,
         &nonce_buffer,
         &public_identity,
-        self_identity,
+        self_identity.as_ref(),
     )?;
 
     let message = bincode::deserialize(&message_bytes[..])?;
@@ -60,18 +60,17 @@ where
     Ok((message, public_identity))
 }
 
-pub async fn write_response<U, E>(
-    response: MessageResult<U, E>,
+pub async fn try_write_message<Message>(
+    message: Message,
     id: &PublicIdentity,
     mut wr: WriteHalf<'_>,
-    self_identity: &SelfIdentity,
+    self_identity: Arc<SelfIdentity>,
 ) -> Result<(), WriteError>
 where
-    U: Serialize,
-    E: Serialize,
+    Message: Serialize,
 {
-    let message_bytes = bincode::serialize(&response)?;
-    let (cipher, nonce) = crypto::try_encrypt(&message_bytes, id, self_identity)?;
+    let message_bytes = bincode::serialize(&message)?;
+    let (cipher, nonce) = crypto::try_encrypt(&message_bytes, id, self_identity.as_ref())?;
     let message_size = (cipher.len() as u32).to_be_bytes();
 
     wr.write_all(self_identity.public_as_bytes()).await?;

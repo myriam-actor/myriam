@@ -1,21 +1,21 @@
-use std::{collections::HashMap, net::IpAddr};
+use std::{collections::HashMap, net::IpAddr, sync::Arc};
 
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::identity::PublicIdentity;
+use crate::identity::{PublicIdentity, SelfIdentity};
 
-pub type IdentityStore = HashMap<String, PublicIdentity>;
+pub type IdentityStore = HashMap<String, Arc<PublicIdentity>>;
 pub type AddressStore = Vec<IpAddr>;
 
 trait AuthActor {
     /// Default implementation. Not really meant to be overriden.
-    fn spawn() -> AuthHandle {
+    fn spawn(self_identity: SelfIdentity) -> AuthHandle {
         let (tx, mut rx) = mpsc::channel::<AuthCommand>(1024);
         tokio::spawn(async move {
-            let mut identity_store: HashMap<String, PublicIdentity> = HashMap::new();
+            let self_identity = Arc::new(self_identity);
+            let mut identity_store: HashMap<String, Arc<PublicIdentity>> = HashMap::new();
             let mut address_store: Vec<IpAddr> = Vec::new();
-
             while let Some(request) = rx.recv().await {
                 match request {
                     AuthCommand::PutAddress(a) => {
@@ -23,14 +23,18 @@ trait AuthActor {
                     }
                     AuthCommand::GetIdentity { hash, sender } => match identity_store.get(&hash) {
                         Some(id) => {
-                            let _ = sender.send(Some(id.to_owned()));
+                            let _ = sender.send(Some(id.clone()));
                         }
                         None => {
                             let _ = sender.send(None);
                         }
                     },
                     AuthCommand::PutIdentity(i) => {
-                        identity_store.insert(i.hash(), i);
+                        identity_store.insert(i.hash(), Arc::new(i));
+                    }
+                    AuthCommand::GetSelfIdentity { sender } => {
+                        let id = self_identity.clone();
+                        let _ = sender.send(id);
                     }
                     AuthCommand::Resolve { request, sender } => {
                         let res = Self::handle(request, &identity_store, &address_store);
@@ -65,7 +69,7 @@ impl AuthHandle {
         Ok(self.sender.send(AuthCommand::PutIdentity(identity)).await?)
     }
 
-    pub async fn fetch_identity(&self, hash: String) -> Result<PublicIdentity, AuthError> {
+    pub async fn fetch_identity(&self, hash: String) -> Result<Arc<PublicIdentity>, AuthError> {
         let (sender, receiver) = oneshot::channel();
 
         self.sender
@@ -76,6 +80,16 @@ impl AuthHandle {
             Some(id) => Ok(id),
             None => Err(AuthError::NotFound),
         }
+    }
+
+    pub async fn fetch_self_identity(&self) -> Result<Arc<SelfIdentity>, AuthError> {
+        let (sender, receiver) = oneshot::channel();
+
+        self.sender
+            .send(AuthCommand::GetSelfIdentity { sender })
+            .await?;
+
+        Ok(receiver.await?)
     }
 
     pub async fn resolve(&self, request: AccessRequest) -> Result<AccessResolution, AuthError> {
@@ -98,9 +112,12 @@ enum AuthCommand {
     PutAddress(IpAddr),
     GetIdentity {
         hash: String,
-        sender: oneshot::Sender<Option<PublicIdentity>>,
+        sender: oneshot::Sender<Option<Arc<PublicIdentity>>>,
     },
     PutIdentity(PublicIdentity),
+    GetSelfIdentity {
+        sender: oneshot::Sender<Arc<SelfIdentity>>,
+    },
     Resolve {
         request: AccessRequest,
         sender: oneshot::Sender<AccessResolution>,
@@ -141,5 +158,54 @@ pub enum AuthError {
 impl From<mpsc::error::SendError<AuthCommand>> for AuthError {
     fn from(_: mpsc::error::SendError<AuthCommand>) -> Self {
         AuthError::Send
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::net::IpAddr;
+
+    use crate::identity::SelfIdentity;
+
+    use super::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore};
+
+    struct IDAutho;
+
+    impl AuthActor for IDAutho {
+        fn handle(
+            request: AccessRequest,
+            id_store: &IdentityStore,
+            _address_store: &AddressStore,
+        ) -> AccessResolution {
+            let id = request.identity;
+
+            if id_store.contains_key(&id.hash()) {
+                AccessResolution::Accepted
+            } else {
+                AccessResolution::Denied
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn spawn_and_authorize() {
+        let self_id = SelfIdentity::new();
+        let public_id = self_id.public_identity().clone();
+
+        let autho = IDAutho::spawn(self_id);
+
+        let addr: IpAddr = "127.0.0.1".parse().unwrap();
+
+        autho.store_identity(public_id.clone()).await.unwrap();
+
+        let x = autho
+            .resolve(AccessRequest {
+                address: addr,
+                identity: public_id.clone(),
+            })
+            .await
+            .unwrap();
+
+        assert!(matches!(AccessResolution::Accepted, x));
     }
 }

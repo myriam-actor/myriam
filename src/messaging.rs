@@ -47,9 +47,19 @@ pub enum TaskResult<T> {
 ///
 #[derive(Serialize, Deserialize, Error)]
 pub enum MessagingError<E> {
+    #[error("could not send data to actor")]
     Send,
+
+    #[error("could not receive data from actor")]
     Recv,
+
+    #[error("task failed: {0}")]
     Task(E),
+
+    #[error("failed to establish or maintain connection to actor")]
+    Transport,
+
+    #[error("internal error inside actor")]
     Internal,
 }
 

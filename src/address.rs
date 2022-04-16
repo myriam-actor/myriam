@@ -2,7 +2,11 @@
 //! Utilities for creating and manipulating addresses
 //!
 
-use std::{fmt::Display, io, net::TcpListener};
+use std::{
+    fmt::Display,
+    io,
+    net::{IpAddr, TcpListener},
+};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -51,17 +55,33 @@ impl Address {
     ///
     /// Return a new address with a different host, useful for things like publishing to some sort of service announcement.
     ///
-    pub fn as_host(&self, new_host: &str) -> Self {
+    pub fn with_host(&self, new_host: &str) -> Self {
         Self {
             host: new_host.into(),
             port: self.port,
         }
     }
+
+    ///
+    /// Return this address' host
+    ///
+    pub fn host(&self) -> String {
+        self.host.clone()
+    }
 }
 
 impl Display for Address {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // TODO: this might cause trouble with IPv6 addresses
         write!(f, "{}:{}", self.host, self.port)
+    }
+}
+
+impl TryFrom<Address> for IpAddr {
+    type Error = AddressError;
+
+    fn try_from(value: Address) -> Result<Self, Self::Error> {
+        Ok(value.host().parse()?)
     }
 }
 
@@ -69,6 +89,9 @@ impl Display for Address {
 pub enum AddressError {
     #[error("failed to adquire free port: {0}")]
     Port(#[from] io::Error),
+
+    #[error("failed to turn addres into an IpAddr")]
+    Conversion(#[from] std::net::AddrParseError),
 }
 
 fn random_port() -> Result<u16, AddressError> {

@@ -1,17 +1,17 @@
-use std::{future::Future, io, sync::Arc};
+use std::{io, sync::Arc};
 
 use async_trait::async_trait;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
 };
 
 use crate::{
     address::{Address, AddressError},
-    auth::AuthHandle,
-    identity::SelfIdentity,
+    auth::{AuthError, AuthHandle},
+    identity::PublicIdentity,
     messaging::{Message, MessageContext, MessageResult, MessageType, MessagingError, TaskResult},
     net,
 };
@@ -38,7 +38,8 @@ pub trait Actor {
             None => Address::new_with_random_port(&opts.host)?,
         };
 
-        let self_identity = opts.self_identity.clone();
+        let self_identity = auth.fetch_self_identity().await?;
+        let public_identity = self_identity.public_identity().clone();
 
         let context = Arc::new(Context {
             self_address: address.clone(),
@@ -62,9 +63,7 @@ pub trait Actor {
 
                 tokio::spawn(async move {
                     let (rd, wr) = socket.split();
-                    match net::try_read_message::<T>(rd, &auth_handle, addr.ip(), &self_identity)
-                        .await
-                    {
+                    match net::try_read_message::<Message<T>>(rd, &auth_handle, addr.ip()).await {
                         Ok((message, identity)) => {
                             let (tx, rx) = oneshot::channel::<MessageResult<U, E>>();
                             tokio::spawn(async move {
@@ -113,7 +112,7 @@ pub trait Actor {
                             };
 
                             if let Err(e) =
-                                net::write_response(response, &identity, wr, &self_identity).await
+                                net::try_write_message(response, &identity, wr, self_identity).await
                             {
                                 // TODO: log the failure and carry on, not much else we can do at this point
                             }
@@ -126,7 +125,10 @@ pub trait Actor {
             }
         });
 
-        Ok(ActorHandle { address })
+        Ok(ActorHandle {
+            address,
+            identity: public_identity,
+        })
     }
 
     async fn handle<T, U, E>(&self, ctx: &Context, addr: Option<Address>, arg: T) -> Result<U, E>
@@ -136,8 +138,10 @@ pub trait Actor {
         E: Serialize + Send + 'static;
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct ActorHandle {
     address: Address,
+    identity: PublicIdentity,
 }
 
 impl ActorHandle {
@@ -146,6 +150,7 @@ impl ActorHandle {
         msg: MessageType<T>,
         ctx: MessageContext,
         from: Option<Address>,
+        auth_handle: &AuthHandle,
     ) -> MessageResult<U, E>
     where
         T: Serialize,
@@ -158,27 +163,54 @@ impl ActorHandle {
             sender: from,
         };
 
-        todo!()
+        let connection = TcpStream::connect(self.address.to_string()).await;
+        let mut stream = match connection {
+            Ok(s) => s,
+            Err(_) => return Err(MessagingError::Transport),
+        };
+
+        let self_identity = match auth_handle.fetch_self_identity().await {
+            Ok(id) => id,
+            Err(_) => return Err(MessagingError::Internal),
+        };
+
+        let (rd, wr) = stream.split();
+        if net::try_write_message::<Message<T>>(message, &self.identity, wr, self_identity)
+            .await
+            .is_err()
+        {
+            return Err(MessagingError::Send);
+        }
+
+        let addr = match self.address.clone().try_into() {
+            Ok(a) => a,
+            Err(_) => return Err(MessagingError::Internal),
+        };
+
+        match net::try_read_message::<MessageResult<U, E>>(rd, auth_handle, addr).await {
+            Ok((res, _)) => res,
+            Err(_) => Err(MessagingError::Recv),
+        }
     }
 
     pub async fn send<T, U, E>(
         &self,
         msg: MessageType<T>,
         ctx: MessageContext,
+        auth_handle: &AuthHandle,
     ) -> MessageResult<U, E>
     where
         T: Serialize,
         U: DeserializeOwned,
         E: DeserializeOwned,
     {
-        self.send_from(msg, ctx, None).await
+        self.send_from(msg, ctx, None, auth_handle).await
     }
 }
 
 pub struct ActorOptions {
     pub host: String,
     pub port: Option<u16>,
-    pub self_identity: SelfIdentity,
 }
 
 #[derive(Clone)]
@@ -193,4 +225,7 @@ pub enum SpawnError {
 
     #[error("failed to open listener: {0}")]
     Listener(#[from] io::Error),
+
+    #[error("{0}")]
+    Auth(#[from] AuthError),
 }
