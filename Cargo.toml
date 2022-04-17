@@ -3,6 +3,12 @@ name = "myriam"
 version = "0.1.0"
 edition = "2021"
 license = "Apache-2.0"
+description = "Small, stateless, remote actors with e2e encryption."
+homepage = "https://gitlab.com/ariSun/myriam-rs"
+repository = "https://gitlab.com/ariSun/myriam-rs"
+categories = ["concurrency, network-programming"]
+keywords = ["actor", "actors", "distributed"]
+authors = ["Ariela Wenner <arisunz at disroot dot org>"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
