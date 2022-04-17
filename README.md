@@ -77,7 +77,7 @@ async fn foo() {
         read_timeout: None
     };
 
-    // suppose we somehow publish this handle in an service for discoverability.
+    // suppose we somehow publish this handle in a service for discoverability.
     let actor_handle = MyActor::spawn(opts, actor_auth_handle.clone())
         .await
         .unwrap();
@@ -107,4 +107,4 @@ async fn foo() {
 
 (c) Ariela Wenner - 2022
 
-Licensed under the [Apache License 2.0](LICENSE).
+Licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0.txt).
