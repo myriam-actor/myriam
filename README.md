@@ -72,7 +72,7 @@ async fn foo() {
     // ... populate auth actor with addresses/identities ...
 
     let opts = ActorOptions {
-        host: "localhost".into(),
+        host: "::1".into(),
         port: None,
         read_timeout: None
     };
@@ -85,6 +85,8 @@ async fn foo() {
     // now in machine B, with a handle to the actor.
     let client_self_identity = SelfIdentity::new();
     let client_auth_handle = Autho::spawn(client_self_identity).await;
+
+    // ... pupulate the client auth_handle with (at least) the remote actor's identity ...
 
     let _response = actor_handle
         .send::<String, String, SomeError>(
