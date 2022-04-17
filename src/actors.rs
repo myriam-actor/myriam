@@ -38,128 +38,134 @@ pub trait Actor {
     type Error: Serialize + Send + 'static;
 
     ///
-    /// Spawn an actor and return a handle to it.
-    ///
-    /// You are NOT meant to implement this, only [Actor::handle].
-    ///
-    async fn spawn(opts: ActorOptions, auth: AuthHandle) -> Result<ActorHandle, SpawnError> {
-        let address = match opts.port {
-            Some(p) => Address::new_with_checked_port(&opts.host, p)?,
-            None => Address::new_with_random_port(&opts.host)?,
-        };
-
-        let read_timeout: u64 = match opts.read_timeout {
-            Some(t) => t,
-            None => match std::env::var(MAX_READ_TIMEOUT_VAR_NAME) {
-                Ok(s) => match s.parse::<u64>() {
-                    Ok(t) => t,
-                    Err(_) => DEFAULT_MAX_READ_TIMEOUT,
-                },
-                Err(_) => DEFAULT_MAX_READ_TIMEOUT,
-            },
-        };
-
-        let self_identity = auth.fetch_self_identity().await?;
-        let public_identity = self_identity.public_identity().clone();
-
-        let context = Arc::new(Context {
-            self_address: address.clone(),
-        });
-        let auth_handle = Arc::new(auth);
-
-        let listener = TcpListener::bind(address.to_string()).await?;
-        tracing::debug!("new actor listening on {}", listener.local_addr().unwrap());
-        tokio::spawn(async move {
-            let (stop_tx, mut stop_rx) = mpsc::channel::<()>(100);
-
-            // TODO: what if .accept() fails?
-            while let Ok((mut socket, addr)) = listener.accept().await {
-                if stop_rx.try_recv().is_ok() {
-                    break;
-                }
-
-                let context = context.clone();
-                let auth_handle = auth_handle.clone();
-                let self_identity = self_identity.clone();
-                let stop_tx = stop_tx.clone();
-
-                tokio::spawn(async move {
-                    let (rd, wr) = socket.split();
-                    if let Ok(Ok((message, identity))) = tokio::time::timeout(
-                        Duration::from_millis(read_timeout),
-                        net::try_read_message::<Message<Self::Input>>(rd, &auth_handle, addr.ip()),
-                    )
-                    .await
-                    {
-                        let (tx, rx) =
-                            oneshot::channel::<MessageResult<Self::Output, Self::Error>>();
-                        tokio::spawn(async move {
-                            match message.message_type {
-                                MessageType::Ping => {
-                                    let _ = tx.send(Ok(TaskResult::Accepted));
-                                }
-                                MessageType::Stop => {
-                                    let _ = stop_tx.send(());
-                                    let _ = tx.send(Ok(TaskResult::Accepted));
-                                }
-                                MessageType::Task(arg) => match message.context {
-                                    MessageContext::NonYielding => {
-                                        tokio::spawn(async move {
-                                            let _ =
-                                                Self::handle(&context, message.sender, arg).await;
-                                        });
-
-                                        let _ = tx.send(Ok(TaskResult::Accepted));
-                                    }
-                                    MessageContext::Yielding => {
-                                        match Self::handle(&context, message.sender, arg).await {
-                                            Ok(res) => {
-                                                let _ = tx.send(Ok(TaskResult::Finished(res)));
-                                            }
-                                            Err(err) => {
-                                                let _ = tx.send(Err(MessagingError::Task(err)));
-                                            }
-                                        }
-                                    }
-                                },
-                            }
-                        });
-
-                        let response = match rx.await {
-                            Ok(res) => res,
-                            Err(_) => return,
-                        };
-
-                        if (net::try_write_message(response, &identity, wr, self_identity).await)
-                            .is_err()
-                        {
-                            tracing::warn!("Failed to write response to trusted request. Maybe the reader dropped?");
-                        }
-                    } else {
-                        tracing::warn!(
-                            "Got an incoming message, but failed to read it entirely. Dropping connection."
-                        );
-                    }
-                });
-            }
-        });
-
-        Ok(ActorHandle {
-            address,
-            identity: public_identity,
-        })
-    }
-
-    ///
     /// Handling method for incoming messages.
     ///
     /// `ctx` contains the actors' own address, while `addr` (if present) correspond to the address of the actor that sent the message.
     ///
     async fn handle(
+        &self,
         ctx: &Context,
         addr: Option<Address>,
         arg: Self::Input,
     ) -> Result<Self::Output, Self::Error>;
+}
+
+pub async fn spawn<T, U, E>(
+    actor: Box<dyn Actor<Input = T, Output = U, Error = E> + Send + Sync>,
+    opts: ActorOptions,
+    auth: AuthHandle,
+) -> Result<ActorHandle, SpawnError>
+where
+    T: DeserializeOwned + Send + 'static,
+    U: Serialize + Send + 'static,
+    E: Serialize + Send + 'static,
+{
+    let address = match opts.port {
+        Some(p) => Address::new_with_checked_port(&opts.host, p)?,
+        None => Address::new_with_random_port(&opts.host)?,
+    };
+
+    let read_timeout: u64 = match opts.read_timeout {
+        Some(t) => t,
+        None => match std::env::var(MAX_READ_TIMEOUT_VAR_NAME) {
+            Ok(s) => match s.parse::<u64>() {
+                Ok(t) => t,
+                Err(_) => DEFAULT_MAX_READ_TIMEOUT,
+            },
+            Err(_) => DEFAULT_MAX_READ_TIMEOUT,
+        },
+    };
+
+    let self_identity = auth.fetch_self_identity().await?;
+    let public_identity = self_identity.public_identity().clone();
+
+    let context = Arc::new(Context {
+        self_address: address.clone(),
+    });
+    let auth_handle = Arc::new(auth);
+
+    let listener = TcpListener::bind(address.to_string()).await?;
+    tracing::debug!("new actor listening on {}", listener.local_addr().unwrap());
+    tokio::spawn(async move {
+        let (stop_tx, mut stop_rx) = mpsc::channel::<()>(100);
+        let actor = Arc::new(actor);
+
+        // TODO: what if .accept() fails?
+        while let Ok((mut socket, addr)) = listener.accept().await {
+            if stop_rx.try_recv().is_ok() {
+                break;
+            }
+
+            let context = context.clone();
+            let auth_handle = auth_handle.clone();
+            let self_identity = self_identity.clone();
+            let stop_tx = stop_tx.clone();
+            let actor = actor.clone();
+
+            tokio::spawn(async move {
+                let (rd, wr) = socket.split();
+                if let Ok(Ok((message, identity))) = tokio::time::timeout(
+                    Duration::from_millis(read_timeout),
+                    net::try_read_message::<Message<T>>(rd, &auth_handle, addr.ip()),
+                )
+                .await
+                {
+                    let (tx, rx) = oneshot::channel::<MessageResult<U, E>>();
+
+                    tokio::spawn(async move {
+                        match message.message_type {
+                            MessageType::Ping => {
+                                let _ = tx.send(Ok(TaskResult::Accepted));
+                            }
+                            MessageType::Stop => {
+                                let _ = stop_tx.send(());
+                                let _ = tx.send(Ok(TaskResult::Accepted));
+                            }
+                            MessageType::Task(arg) => match message.context {
+                                MessageContext::NonYielding => {
+                                    tokio::spawn(async move {
+                                        let _ = actor.handle(&context, message.sender, arg).await;
+                                    });
+
+                                    let _ = tx.send(Ok(TaskResult::Accepted));
+                                }
+                                MessageContext::Yielding => {
+                                    match actor.handle(&context, message.sender, arg).await {
+                                        Ok(res) => {
+                                            let _ = tx.send(Ok(TaskResult::Finished(res)));
+                                        }
+                                        Err(err) => {
+                                            let _ = tx.send(Err(MessagingError::Task(err)));
+                                        }
+                                    }
+                                }
+                            },
+                        }
+                    });
+
+                    let response = match rx.await {
+                        Ok(res) => res,
+                        Err(_) => return,
+                    };
+
+                    if (net::try_write_message(response, &identity, wr, self_identity).await)
+                        .is_err()
+                    {
+                        tracing::warn!("Failed to write response to trusted request. Maybe the reader dropped?");
+                    }
+                } else {
+                    tracing::warn!(
+                        "Got an incoming message, but failed to read it entirely. Dropping connection."
+                    );
+                }
+            });
+        }
+    });
+
+    Ok(ActorHandle {
+        address,
+        identity: public_identity,
+    })
 }
 
 ///

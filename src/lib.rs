@@ -16,7 +16,7 @@ mod tests {
     use tracing_subscriber::EnvFilter;
 
     use crate::{
-        actors::{Actor, ActorOptions, Context},
+        actors::{self, Actor, ActorOptions, Context},
         address::Address,
         auth::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore},
         identity::SelfIdentity,
@@ -47,7 +47,17 @@ mod tests {
         Empty,
     }
 
-    struct MyActor;
+    struct MyActor {
+        postfix: String,
+    }
+
+    impl MyActor {
+        fn new() -> Self {
+            Self {
+                postfix: "nya".into(),
+            }
+        }
+    }
 
     #[async_trait]
     impl Actor for MyActor {
@@ -56,6 +66,7 @@ mod tests {
         type Error = SomeError;
 
         async fn handle(
+            &self,
             _ctx: &Context,
             _addr: Option<Address>,
             arg: Self::Input,
@@ -63,7 +74,7 @@ mod tests {
             if arg.is_empty() {
                 Err(SomeError::Empty)
             } else {
-                Ok(arg.to_uppercase())
+                Ok(format!("{}-{}", arg.to_uppercase(), &self.postfix))
             }
         }
     }
@@ -95,7 +106,8 @@ mod tests {
             read_timeout: Some(2000),
         };
 
-        let actor_handle = MyActor::spawn(opts, actor_auth_handle.clone())
+        let actor = MyActor::new();
+        let actor_handle = actors::spawn(Box::new(actor), opts, actor_auth_handle.clone())
             .await
             .unwrap();
 
@@ -111,6 +123,7 @@ mod tests {
             Ok(res) => {
                 if let TaskResult::Finished(s) = res {
                     tracing::info!("response: {s}");
+                    assert_eq!("SOMETHING-nya", s);
                 } else {
                     panic!("expected a value in result, only got confirmation");
                 }
