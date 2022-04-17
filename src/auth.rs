@@ -20,10 +20,9 @@ pub type AddressStore = Vec<IpAddr>;
 ///
 /// Override [AuthActor::handle] to plug in your own authorization logic.
 ///
-/// Note that whether the [crate::auth::IdentityStore] and/or the [crate::auth::AddressStore]
-/// are used as a "blocklist" or otherwise depends entirely of the logic inside the handler.
-/// For example, you might choose to keep a list of list of IP addresses in a blocklist, while
-/// explicitly allowing the identities in your AddressStore, therefore using it as an allow-list.
+/// Note that whether the [crate::auth::AddressStore] is used as a "blocklist" or not depends
+/// entirely of the logic inside the handler. The (IdentityStore)[crate::auth::IdentityStore],
+/// though, always acts as an allow-list.
 ///
 /// Since `handle` is async (it has to be, for example, if it needs to contact an
 /// external service for authorization), the whole trait needs to be async.
