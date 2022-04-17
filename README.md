@@ -95,4 +95,4 @@ impl Actor for MyActor {
 
 (c) Ariela Wenner - 2022
 
-Licensed under the [Apache License 2.0].
+Licensed under the [Apache License 2.0](LICENSE).
