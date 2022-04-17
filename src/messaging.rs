@@ -1,3 +1,7 @@
+//!
+//! Main datatypes for message and results exchange between actors.
+//!
+
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -24,7 +28,7 @@ pub enum MessageType<T> {
 
 ///
 /// Actual type an actor will receive and handle. `sender` is optional because a message
-/// _can_ be sent from toplevel, as opposed to sending from within another actor.
+/// could be sent from a toplevel context, as opposed to actor-to-actor.
 ///
 #[derive(Serialize, Deserialize)]
 pub struct Message<T> {
