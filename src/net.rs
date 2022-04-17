@@ -1,3 +1,16 @@
+//!
+//! Code implementing messaging and myriam's wire format.
+//!
+//! Our current wire format is as follows:
+//!
+//! | 1     | 2      | 3 | 4                     ... |
+//!
+//! 1. public key bytes
+//! 2. nonce bytes
+//! 3. size of the following message as a network order u32
+//! 4. ciphetext of the serialized message
+//!
+
 use std::{net::IpAddr, sync::Arc};
 
 use serde::{de::DeserializeOwned, Serialize};

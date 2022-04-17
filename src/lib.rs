@@ -5,9 +5,8 @@ pub mod address;
 pub mod auth;
 mod crypto;
 pub mod identity;
-mod messaging;
+pub mod messaging;
 mod net;
-// pub mod trust_store;
 
 #[cfg(test)]
 mod tests {
@@ -23,8 +22,10 @@ mod tests {
     };
 
     struct Autho;
+
+    #[async_trait]
     impl AuthActor for Autho {
-        fn handle(
+        async fn handle(
             request: AccessRequest,
             _id_store: &IdentityStore,
             _address_store: &AddressStore,
@@ -65,7 +66,7 @@ mod tests {
     #[tokio::test]
     async fn spawn_and_message() {
         let actor_self_identity = SelfIdentity::new();
-        let actor_auth_handle = Autho::spawn(actor_self_identity);
+        let actor_auth_handle = Autho::spawn(actor_self_identity).await;
 
         let opts = ActorOptions {
             host: "localhost".into(),
@@ -77,7 +78,7 @@ mod tests {
             .unwrap();
 
         let client_self_identity = SelfIdentity::new();
-        let client_auth_handle = Autho::spawn(client_self_identity);
+        let client_auth_handle = Autho::spawn(client_self_identity).await;
 
         let _response = actor_handle
             .send::<String, String, SomeError>(

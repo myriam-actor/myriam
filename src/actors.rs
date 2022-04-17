@@ -1,3 +1,8 @@
+//!
+//! Here you will find the "core" of this implementation. Particularly, the [Actor] trait, its default spawning method and a generic handler.
+//! Additionally, we define a handler which is itself used to send messages to an actor.
+//!
+
 use std::{io, sync::Arc};
 
 use async_trait::async_trait;
@@ -16,23 +21,23 @@ use crate::{
     net,
 };
 
+///
+/// Actor is a trait. You only have to implement a handle method for your type.
+///
+/// [Actor::Input], [Actor::Output] and [Actor::Error] correspond to the input and result types of the task implemented as [Actor::handle]
+///
 #[async_trait]
 pub trait Actor {
-    type Input;
-    type Output;
-    type Error;
+    type Input: DeserializeOwned + Send + 'static;
+    type Output: Serialize + Send + 'static;
+    type Error: Serialize + Send + 'static;
 
     ///
     /// Spawn an actor and return a handle to it.
     ///
-    /// You are NOT meant to implement this, only [Self::handle].
+    /// You are NOT meant to implement this, only [Actor::handle].
     ///
-    async fn spawn(opts: ActorOptions, auth: AuthHandle) -> Result<ActorHandle, SpawnError>
-    where
-        Self::Input: DeserializeOwned + Send + 'static,
-        Self::Output: Serialize + Send + 'static,
-        Self::Error: Serialize + Send + 'static,
-    {
+    async fn spawn(opts: ActorOptions, auth: AuthHandle) -> Result<ActorHandle, SpawnError> {
         let address = match opts.port {
             Some(p) => Address::new_with_checked_port(&opts.host, p)?,
             None => Address::new_with_random_port(&opts.host)?,
@@ -126,17 +131,18 @@ pub trait Actor {
         ctx: &Context,
         addr: Option<Address>,
         arg: Self::Input,
-    ) -> Result<Self::Output, Self::Error>
-    where
-        Self::Input: DeserializeOwned + Send + 'static,
-        Self::Output: Serialize + Send + 'static,
-        Self::Error: Serialize + Send + 'static;
+    ) -> Result<Self::Output, Self::Error>;
 }
 
+///
+/// Handle to message an actor. [ActorHandle::identity] corresponds to the public identity (public key) of said actor.
+///
+/// We want it to derive {De}Serialize for stuff like actor discovery, etc.
+///
 #[derive(Serialize, Deserialize)]
 pub struct ActorHandle {
-    address: Address,
-    identity: PublicIdentity,
+    pub address: Address,
+    pub identity: PublicIdentity,
 }
 
 impl ActorHandle {
