@@ -62,6 +62,8 @@ impl Actor for MyActor {
     let actor_self_identity = SelfIdentity::new();
     let actor_auth_handle = Autho::spawn(actor_self_identity).await;
 
+    // ... populate auth actor with addresses/identities ...
+
     let opts = ActorOptions {
         host: "localhost".into(),
         port: None,
