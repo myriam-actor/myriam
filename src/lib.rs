@@ -13,7 +13,7 @@ mod tests {
     use async_trait::async_trait;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
-    use tracing::Level;
+    use tracing_subscriber::EnvFilter;
 
     use crate::{
         actors::{Actor, ActorOptions, Context},
@@ -70,9 +70,8 @@ mod tests {
 
     #[tokio::test]
     async fn spawn_and_message() {
-        tracing_subscriber::fmt()
-            .with_max_level(Level::DEBUG)
-            .init();
+        let filter = EnvFilter::from_default_env();
+        tracing_subscriber::fmt().with_env_filter(filter).init();
 
         let actor_self_identity = SelfIdentity::new();
         let actor_auth_handle = Autho::spawn(actor_self_identity.clone()).await;
