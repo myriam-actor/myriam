@@ -90,7 +90,7 @@ async fn main() {
     auth_handle
         .store_identity(actor_handle.identity.clone())
         .await
-        .expect("failed to insert actor public idenity in store");
+        .expect("failed to insert actor public identity in store");
 
     let result = actor_handle
         .send::<String, String, SomeError>(
