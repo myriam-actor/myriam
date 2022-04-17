@@ -1,12 +1,12 @@
 [package]
 name = "myriam"
-version = "0.0.1"
+version = "0.0.1-b"
 edition = "2021"
 license = "Apache-2.0"
 description = "Remote actors with e2e encryption."
 homepage = "https://gitlab.com/ariSun/myriam-rs"
 repository = "https://gitlab.com/ariSun/myriam-rs"
-categories = ["concurrency, network-programming"]
+categories = ["concurrency", "network-programming", "asynchronous"]
 keywords = ["actor", "actors", "distributed"]
 authors = ["Ariela Wenner <arisunz at disroot dot org>"]
 
