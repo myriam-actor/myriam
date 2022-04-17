@@ -99,7 +99,7 @@ fn random_port() -> Result<u16, AddressError> {
 }
 
 fn check_port(port: u16) -> Result<u16, AddressError> {
-    let socket = TcpListener::bind(format!("::0:{port}"))?;
+    let socket = TcpListener::bind(format!("[::1]:{port}"))?;
 
     Ok(socket.local_addr()?.port())
 }

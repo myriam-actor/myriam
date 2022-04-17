@@ -68,6 +68,7 @@ pub trait Actor {
         let auth_handle = Arc::new(auth);
 
         let listener = TcpListener::bind(address.to_string()).await?;
+        tracing::debug!("new actor listening on {}", listener.local_addr().unwrap());
         tokio::spawn(async move {
             let (stop_tx, mut stop_rx) = mpsc::channel::<()>(100);
 
@@ -132,8 +133,12 @@ pub trait Actor {
                         if (net::try_write_message(response, &identity, wr, self_identity).await)
                             .is_err()
                         {
-                            // TODO: log the failure and carry on, not much else we can do at this point
+                            tracing::warn!("Failed to write response to trusted request. Maybe the reader dropped?");
                         }
+                    } else {
+                        tracing::warn!(
+                            "Got an incoming message, but failed to read it entirely. Dropping connection."
+                        );
                     }
                 });
             }

@@ -42,7 +42,7 @@ use crate::{
 
 const MAX_MSG_SIZE_VAR_NAME: &str = "MYRIAM_MAX_MSG_SIZE";
 
-/// max size of the incoming message cipher in bytes
+/// max size of an incoming message cipher in bytes
 const DEFAULT_MAX_MESSAGE_SIZE: u32 = 8_388_608;
 
 pub async fn try_read_message<Message>(
@@ -57,16 +57,29 @@ where
     rd.read_exact(&mut key_buffer).await?;
 
     let alleged_identity = PublicIdentity::from(key_buffer);
+    tracing::debug!(
+        "Got incoming request with hash ID {}.",
+        alleged_identity.hash()
+    );
+
     match auth_handle
         .resolve(AccessRequest::new(addr, alleged_identity.clone()))
         .await?
     {
-        AccessResolution::Accepted => (),
+        AccessResolution::Accepted => {
+            tracing::debug!("Request with ID hash {} accepted.", alleged_identity.hash())
+        }
         AccessResolution::Denied => return Err(ReadError::Unauthorized),
     }
 
     // ignore the key given to us and fetch it again from our own store
-    let public_identity = auth_handle.fetch_identity(alleged_identity.hash()).await?;
+    let public_identity = match auth_handle.fetch_identity(alleged_identity.hash()).await {
+        Ok(id) => id,
+        Err(e) => {
+            tracing::warn!("Could not fetch identity from store -- {e}. Dropping.");
+            return Err(ReadError::Auth(e));
+        }
+    };
 
     let mut nonce_buffer: [u8; NONCE_BYTES] = [0; NONCE_BYTES];
     rd.read_exact(&mut nonce_buffer).await?;
@@ -84,11 +97,25 @@ where
 
     let size = u32::from_be_bytes(size_buffer);
     if size > max_size {
+        tracing::warn!(
+            "Incoming message with ID hash {} exceeded allowed cipher size. Dropping.",
+            alleged_identity.hash(),
+        );
         return Err(ReadError::InvalidMessage);
     }
 
+    tracing::debug!(
+        "Reading message cipher from {} with {size} bytes.",
+        alleged_identity.hash()
+    );
+
     let mut cipher_buffer: Vec<u8> = vec![0; size as usize];
     rd.read_exact(cipher_buffer.as_mut_slice()).await?;
+
+    tracing::debug!(
+        "Done reading message cipher from {}. Attempting to decrypt.",
+        alleged_identity.hash()
+    );
 
     let self_identity = auth_handle.fetch_self_identity().await?;
 
@@ -100,6 +127,11 @@ where
     )?;
 
     let message = bincode::deserialize(&message_bytes[..])?;
+
+    tracing::debug!(
+        "Message for {} decryped and decoded successfully.",
+        alleged_identity.hash()
+    );
 
     Ok((message, public_identity))
 }
@@ -117,10 +149,16 @@ where
     let (cipher, nonce) = crypto::try_encrypt(&message_bytes, id, self_identity.as_ref())?;
     let message_size = (cipher.len() as u32).to_be_bytes();
 
+    tracing::debug!(
+        "Sending message to {} with size {}.",
+        id.hash(),
+        cipher.len()
+    );
+
     wr.write_all(self_identity.public_as_bytes()).await?;
     wr.write_all(&nonce).await?;
     wr.write_all(&message_size).await?;
-    wr.write_all(&message_bytes).await?;
+    wr.write_all(&cipher).await?;
 
     Ok(())
 }

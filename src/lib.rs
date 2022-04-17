@@ -13,6 +13,7 @@ mod tests {
     use async_trait::async_trait;
     use serde::{Deserialize, Serialize};
     use thiserror::Error;
+    use tracing::Level;
 
     use crate::{
         actors::{Actor, ActorOptions, Context},
@@ -69,21 +70,35 @@ mod tests {
 
     #[tokio::test]
     async fn spawn_and_message() {
+        tracing_subscriber::fmt()
+            .with_max_level(Level::DEBUG)
+            .init();
+
         let actor_self_identity = SelfIdentity::new();
-        let actor_auth_handle = Autho::spawn(actor_self_identity).await;
+        let actor_auth_handle = Autho::spawn(actor_self_identity.clone()).await;
+
+        let client_self_identity = SelfIdentity::new();
+        let client_auth_handle = Autho::spawn(client_self_identity.clone()).await;
+
+        actor_auth_handle
+            .store_identity(client_self_identity.public_identity().clone())
+            .await
+            .unwrap();
+
+        client_auth_handle
+            .store_identity(actor_self_identity.public_identity().clone())
+            .await
+            .unwrap();
 
         let opts = ActorOptions {
-            host: "localhost".into(),
+            host: "::1".into(),
             port: None,
-            read_timeout: None,
+            read_timeout: Some(2000),
         };
 
         let actor_handle = MyActor::spawn(opts, actor_auth_handle.clone())
             .await
             .unwrap();
-
-        let client_self_identity = SelfIdentity::new();
-        let client_auth_handle = Autho::spawn(client_self_identity).await;
 
         let response = actor_handle
             .send::<String, String, SomeError>(
@@ -96,7 +111,7 @@ mod tests {
         match response {
             Ok(res) => {
                 if let TaskResult::Finished(s) = res {
-                    println!("response: {s}");
+                    tracing::info!("response: {s}");
                 } else {
                     panic!("expected a value in result, only got confirmation");
                 }
