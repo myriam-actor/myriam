@@ -90,3 +90,9 @@ impl Actor for MyActor {
     ));
 }
 ```
+
+# License
+
+(c) Ariela Wenner - 2022
+
+Licensed under the [Apache License 2.0].
