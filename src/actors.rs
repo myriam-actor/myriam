@@ -3,7 +3,7 @@
 //! Additionally, we define a handler which is itself used to send messages to an actor.
 //!
 
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -20,6 +20,11 @@ use crate::{
     messaging::{Message, MessageContext, MessageResult, MessageType, MessagingError, TaskResult},
     net,
 };
+
+const MAX_READ_TIMEOUT_VAR_NAME: &str = "MYRIAM_READ_TIMEOUT";
+
+/// max time to wait for incoming message in milliseconds
+const DEFAULT_MAX_READ_TIMEOUT: u64 = 30_000;
 
 ///
 /// Actor is a trait. You only have to implement a handle method for your type.
@@ -41,6 +46,17 @@ pub trait Actor {
         let address = match opts.port {
             Some(p) => Address::new_with_checked_port(&opts.host, p)?,
             None => Address::new_with_random_port(&opts.host)?,
+        };
+
+        let read_timeout: u64 = match opts.read_timeout {
+            Some(t) => t,
+            None => match std::env::var(MAX_READ_TIMEOUT_VAR_NAME) {
+                Ok(s) => match s.parse::<u64>() {
+                    Ok(t) => t,
+                    Err(_) => DEFAULT_MAX_READ_TIMEOUT,
+                },
+                Err(_) => DEFAULT_MAX_READ_TIMEOUT,
+            },
         };
 
         let self_identity = auth.fetch_self_identity().await?;
@@ -68,9 +84,11 @@ pub trait Actor {
 
                 tokio::spawn(async move {
                     let (rd, wr) = socket.split();
-                    if let Ok((message, identity)) =
-                        net::try_read_message::<Message<Self::Input>>(rd, &auth_handle, addr.ip())
-                            .await
+                    if let Ok(Ok((message, identity))) = tokio::time::timeout(
+                        Duration::from_millis(read_timeout),
+                        net::try_read_message::<Message<Self::Input>>(rd, &auth_handle, addr.ip()),
+                    )
+                    .await
                     {
                         let (tx, rx) =
                             oneshot::channel::<MessageResult<Self::Output, Self::Error>>();
@@ -217,6 +235,7 @@ impl ActorHandle {
 pub struct ActorOptions {
     pub host: String,
     pub port: Option<u16>,
+    pub read_timeout: Option<u64>,
 }
 
 ///

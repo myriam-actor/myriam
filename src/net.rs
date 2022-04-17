@@ -41,13 +41,9 @@ use crate::{
 };
 
 const MAX_MSG_SIZE_VAR_NAME: &str = "MYRIAM_MAX_MSG_SIZE";
-const MAX_READ_TIMEOUT_VAR_NAME: &str = "MYRIAM_READ_TIMEOUT";
 
 /// max size of the incoming message cipher in bytes
 const DEFAULT_MAX_MESSAGE_SIZE: u32 = 8_388_608;
-
-/// max time to wait for incoming message in milliseconds
-pub const DEFAULT_MAX_READ_WAIT_TIME: usize = 30_000;
 
 pub async fn try_read_message<Message>(
     mut rd: ReadHalf<'_>,

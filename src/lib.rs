@@ -12,13 +12,14 @@ mod net;
 mod tests {
     use async_trait::async_trait;
     use serde::{Deserialize, Serialize};
+    use thiserror::Error;
 
     use crate::{
         actors::{Actor, ActorOptions, Context},
         address::Address,
         auth::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore},
         identity::SelfIdentity,
-        messaging::{MessageContext, MessageType, MessagingError, TaskResult},
+        messaging::{MessageContext, MessageType, TaskResult},
     };
 
     struct Autho;
@@ -39,8 +40,11 @@ mod tests {
         }
     }
 
-    #[derive(Serialize, Deserialize)]
-    struct SomeError;
+    #[derive(Serialize, Deserialize, Debug, Error)]
+    enum SomeError {
+        #[error("empty input")]
+        Empty,
+    }
 
     struct MyActor;
 
@@ -56,7 +60,7 @@ mod tests {
             arg: Self::Input,
         ) -> Result<Self::Output, Self::Error> {
             if arg.is_empty() {
-                Err(SomeError)
+                Err(SomeError::Empty)
             } else {
                 Ok(arg.to_uppercase())
             }
@@ -71,6 +75,7 @@ mod tests {
         let opts = ActorOptions {
             host: "localhost".into(),
             port: None,
+            read_timeout: None,
         };
 
         let actor_handle = MyActor::spawn(opts, actor_auth_handle.clone())
@@ -80,7 +85,7 @@ mod tests {
         let client_self_identity = SelfIdentity::new();
         let client_auth_handle = Autho::spawn(client_self_identity).await;
 
-        let _response = actor_handle
+        let response = actor_handle
             .send::<String, String, SomeError>(
                 MessageType::Task("something".to_string()),
                 MessageContext::Yielding,
@@ -88,9 +93,15 @@ mod tests {
             )
             .await;
 
-        assert!(matches!(
-            Ok::<_, MessagingError<SomeError>>(TaskResult::Finished("SOMETHING")),
-            _response
-        ));
+        match response {
+            Ok(res) => {
+                if let TaskResult::Finished(s) = res {
+                    println!("response: {s}");
+                } else {
+                    panic!("expected a value in result, only got confirmation");
+                }
+            }
+            Err(err) => panic!("could not get response: {err}"),
+        }
     }
 }

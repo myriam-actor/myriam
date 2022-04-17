@@ -7,6 +7,7 @@ Minimal stateless remote actors with e2e encryption.
 ## Configuration
 
 * Message size cap (in bytes): can be set with via env var `MYRIAM_MAX_MSG_SIZE`. Default is `8_388_608`.
+* Message recv timeout (in milliseconds): can be set via `ActorOpts` when spawning or globally with the env var `MYRIAM_READ_TIMEOUT`.
 
 # Example
 
@@ -63,7 +64,7 @@ impl Actor for MyActor {
     }
 }
 
-{
+async fn foo() {
     // Machine A
     let actor_self_identity = SelfIdentity::new();
     let actor_auth_handle = Autho::spawn(actor_self_identity).await;
@@ -73,6 +74,7 @@ impl Actor for MyActor {
     let opts = ActorOptions {
         host: "localhost".into(),
         port: None,
+        read_timeout: None
     };
 
     // suppose we somehow publish this handle in an service for discoverability.
