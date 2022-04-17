@@ -10,7 +10,7 @@ use crate::address::Address;
 ///
 /// Type to specify whether or not a message to an actor is expected to yield a value or not.
 ///
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum MessageContext {
     Yielding,
     NonYielding,
@@ -19,7 +19,7 @@ pub enum MessageContext {
 ///
 /// Types of message an actor accepts.
 ///
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum MessageType<T> {
     Ping,
     Stop,
@@ -30,7 +30,7 @@ pub enum MessageType<T> {
 /// Actual type an actor will receive and handle. `sender` is optional because a message
 /// could be sent from a toplevel context, as opposed to actor-to-actor.
 ///
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Message<T> {
     pub context: MessageContext,
     pub message_type: MessageType<T>,
@@ -40,7 +40,7 @@ pub struct Message<T> {
 ///
 /// Result of a successful message handled by an actor.
 ///
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum TaskResult<T> {
     Accepted,
     Finished(T),
@@ -49,7 +49,7 @@ pub enum TaskResult<T> {
 ///
 /// Result of a failed message in any stage.
 ///
-#[derive(Serialize, Deserialize, Error)]
+#[derive(Serialize, Deserialize, Debug, Error)]
 pub enum MessagingError<E> {
     #[error("could not send data to actor")]
     Send,

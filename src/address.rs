@@ -15,7 +15,7 @@ use thiserror::Error;
 /// Encapsulates a (possibly) valid network address.
 /// We really only check that the port is available when creating an address for binding.
 ///
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Address {
     host: String,
     port: u16,
