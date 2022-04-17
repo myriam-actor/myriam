@@ -12,7 +12,7 @@ mod net;
 #[cfg(test)]
 mod tests {
     use async_trait::async_trait;
-    use serde::{de::DeserializeOwned, Deserialize, Serialize};
+    use serde::{Deserialize, Serialize};
 
     use crate::{
         actors::{Actor, ActorOptions, Context},
@@ -53,12 +53,7 @@ mod tests {
             _ctx: &Context,
             _addr: Option<Address>,
             arg: Self::Input,
-        ) -> Result<Self::Output, Self::Error>
-        where
-            Self::Input: DeserializeOwned + Send + 'static,
-            Self::Output: Serialize + Send + 'static,
-            Self::Error: Serialize + Send + 'static,
-        {
+        ) -> Result<Self::Output, Self::Error> {
             if arg.is_empty() {
                 Err(SomeError)
             } else {
