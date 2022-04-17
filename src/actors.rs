@@ -127,6 +127,11 @@ pub trait Actor {
         })
     }
 
+    ///
+    /// Handling method for incoming messages.
+    ///
+    /// `ctx` contains the actors' own address, while `addr` (if present) correspond to the address of the actor that sent the message.
+    ///
     async fn handle(
         ctx: &Context,
         addr: Option<Address>,
@@ -214,6 +219,9 @@ pub struct ActorOptions {
     pub port: Option<u16>,
 }
 
+///
+/// Struct passed to [Actor::handle] containing the address of itself.
+///
 #[derive(Clone)]
 pub struct Context {
     pub self_address: Address,
