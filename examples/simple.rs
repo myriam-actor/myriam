@@ -72,6 +72,7 @@ async fn spawn(sender_id: PublicIdentity) -> ActorHandle {
     actors::spawn(Box::new(actor), opts, handle)
         .await
         .expect("failed to spawn actor")
+        .0
 }
 
 #[tokio::main]

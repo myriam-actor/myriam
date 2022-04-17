@@ -107,7 +107,7 @@ mod tests {
         };
 
         let actor = MyActor::new();
-        let actor_handle = actors::spawn(Box::new(actor), opts, actor_auth_handle.clone())
+        let (actor_handle, _) = actors::spawn(Box::new(actor), opts, actor_auth_handle.clone())
             .await
             .unwrap();
 

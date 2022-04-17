@@ -1,5 +1,5 @@
 //!
-//! Here you will find the "core" of this implementation. Particularly, the [Actor] trait, its default spawning method and a generic handler.
+//! Here you will find the "core" of this implementation. Particularly, the [Actor] trait, with a generic handler and a spawning function.
 //! Additionally, we define a handler which is itself used to send messages to an actor.
 //!
 
@@ -11,6 +11,7 @@ use thiserror::Error;
 use tokio::{
     net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
+    task::JoinHandle,
 };
 
 use crate::{
@@ -50,11 +51,16 @@ pub trait Actor {
     ) -> Result<Self::Output, Self::Error>;
 }
 
+///
+/// Take ownership of a dyn Actor though a Box and spawn an instance of it.
+///
+/// If all goes well, returns a handle to the actor and the `JoinHandle<()>` of its internal task.
+///
 pub async fn spawn<T, U, E>(
     actor: Box<dyn Actor<Input = T, Output = U, Error = E> + Send + Sync>,
     opts: ActorOptions,
     auth: AuthHandle,
-) -> Result<ActorHandle, SpawnError>
+) -> Result<(ActorHandle, JoinHandle<()>), SpawnError>
 where
     T: DeserializeOwned + Send + 'static,
     U: Serialize + Send + 'static,
@@ -86,7 +92,7 @@ where
 
     let listener = TcpListener::bind(address.to_string()).await?;
     tracing::debug!("new actor listening on {}", listener.local_addr().unwrap());
-    tokio::spawn(async move {
+    let task_handle = tokio::spawn(async move {
         let (stop_tx, mut stop_rx) = mpsc::channel::<()>(100);
         let actor = Arc::new(actor);
 
@@ -162,10 +168,13 @@ where
         }
     });
 
-    Ok(ActorHandle {
-        address,
-        identity: public_identity,
-    })
+    Ok((
+        ActorHandle {
+            address,
+            identity: public_identity,
+        },
+        task_handle,
+    ))
 }
 
 ///
