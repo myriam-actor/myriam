@@ -137,7 +137,7 @@ impl AuthHandle {
 
     ///
     /// Resolve an incoming authorizarion request. This is used internally when receiving a message,
-    /// and not something you're should worry about as a user.
+    /// and not something you should worry about as a user.
     ///
     pub async fn resolve(&self, request: AccessRequest) -> Result<AccessResolution, AuthError> {
         let (sender, receiver) = oneshot::channel();
