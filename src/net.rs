@@ -10,6 +10,20 @@
 //! 3. size of the following message as a network order u32
 //! 4. ciphetext of the serialized message
 //!
+//! We receive the message in chunks. After receiving (1), we send that along with the
+//! origin IP of the message to the auth actor. Only if we get the OK from that, we keep
+//! receiving the rest of the message.
+//!
+//! BIG TODO here: matching (1) against our internal store does NOT actually
+//! verify the identity of the actor sending the message, since this key is public.
+//! When receiving a public key that is in our store but whose corresponding secret key was
+//! not used to encrypt (4), decryption will fail, of course, but we might still read hundreds
+//! of thousands of bytes before finding that out. Send enough fake messages and your host gets DoS'ed.
+//!
+//! Long story short, we need to find a way to add a signature somewhere before (3) to ensure
+//! the key actually comes from where it says it comes from. Limiting how big (3) can be helps,
+//! but it is a copout for this particular problem.
+//!
 
 use std::{net::IpAddr, sync::Arc};
 
@@ -25,6 +39,15 @@ use crate::{
     crypto::{self, DecryptionError, KEY_BYTES, NONCE_BYTES},
     identity::{PublicIdentity, SelfIdentity},
 };
+
+const MAX_MSG_SIZE_VAR_NAME: &str = "MYRIAM_MAX_MSG_SIZE";
+const MAX_READ_TIMEOUT_VAR_NAME: &str = "MYRIAM_READ_TIMEOUT";
+
+/// max size of the incoming message cipher in bytes
+const DEFAULT_MAX_MESSAGE_SIZE: u32 = 8_388_608;
+
+/// max time to wait for incoming message in milliseconds
+pub const DEFAULT_MAX_READ_WAIT_TIME: usize = 30_000;
 
 pub async fn try_read_message<Message>(
     mut rd: ReadHalf<'_>,
@@ -46,6 +69,7 @@ where
         AccessResolution::Denied => return Err(ReadError::Unauthorized),
     }
 
+    // ignore the key given to us and fetch it again from our own store
     let public_identity = auth_handle.fetch_identity(alleged_identity.hash()).await?;
 
     let mut nonce_buffer: [u8; NONCE_BYTES] = [0; NONCE_BYTES];
@@ -54,8 +78,19 @@ where
     let mut size_buffer: [u8; 4] = [0; 4];
     rd.read_exact(&mut size_buffer).await?;
 
-    // TODO: add option to cap size and check against that
+    let max_size: u32 = match std::env::var(MAX_MSG_SIZE_VAR_NAME) {
+        Ok(s) => match s.parse::<u32>() {
+            Ok(s) => s,
+            Err(_) => DEFAULT_MAX_MESSAGE_SIZE,
+        },
+        Err(_) => DEFAULT_MAX_MESSAGE_SIZE,
+    };
+
     let size = u32::from_be_bytes(size_buffer);
+    if size > max_size {
+        return Err(ReadError::InvalidMessage);
+    }
+
     let mut cipher_buffer: Vec<u8> = vec![0; size as usize];
     rd.read_exact(cipher_buffer.as_mut_slice()).await?;
 
@@ -110,6 +145,9 @@ pub enum ReadError {
 
     #[error("failed to decode incoming message")]
     Decoding(#[from] std::boxed::Box<bincode::ErrorKind>),
+
+    #[error("incoming message is invalid")]
+    InvalidMessage,
 }
 
 #[derive(Debug, Error)]

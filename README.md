@@ -2,6 +2,12 @@
 
 Minimal stateless remote actors with e2e encryption.
 
+# Usage
+
+## Configuration
+
+* Message size cap (in bytes): can be set with via env var `MYRIAM_MAX_MSG_SIZE`. Default is `8_388_608`.
+
 # Example
 
 ```rust
