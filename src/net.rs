@@ -3,26 +3,18 @@
 //!
 //! Our current wire format is as follows:
 //!
-//! | 1     | 2      | 3 | 4                     ... |
+//! `| 1       | 2    | 3    | 4    | 5 | 6                           ... |`
 //!
 //! 1. public key bytes
-//! 2. nonce bytes
-//! 3. size of the following message as a network order u32
-//! 4. ciphetext of the serialized message
+//! 2. timestamp nonce
+//! 3. timestamp cipher
+//! 4. message ciphertext nonce
+//! 5. size of the message ciphertext as a network order u32
+//! 6. ciphetext of the serialized message
 //!
-//! We receive the message in chunks. After receiving (1), we send that along with the
+//! We receive the message in chunks. After reading (1), we send that along with the
 //! origin IP of the message to the auth actor. Only if we get the OK from that, we keep
-//! receiving the rest of the message.
-//!
-//! BIG TODO here: matching (1) against our internal store does NOT actually
-//! verify the identity of the actor sending the message, since this key is public.
-//! When receiving a public key that is in our store but whose corresponding secret key was
-//! not used to encrypt (4), decryption will fail, of course, but we might still read hundreds
-//! of thousands of bytes before finding that out. Send enough fake messages and your host gets DoS'ed.
-//!
-//! Long story short, we need to find a way to add a signature somewhere before (3) to ensure
-//! the key actually comes from where it says it comes from. Limiting how big (3) can be helps,
-//! but it is a copout for this particular problem.
+//! reading the rest of the message.
 //!
 
 use std::{net::IpAddr, sync::Arc};
@@ -36,14 +28,17 @@ use tokio::{
 
 use crate::{
     auth::{AccessRequest, AccessResolution, AuthError, AuthHandle},
-    crypto::{self, DecryptionError, KEY_BYTES, NONCE_BYTES},
+    crypto::{self, DecryptionError, KEY_BYTES, NONCE_BYTES, TIMESTAMP_CIPHER_BYTES},
     identity::{PublicIdentity, SelfIdentity},
 };
 
 const MAX_MSG_SIZE_VAR_NAME: &str = "MYRIAM_MAX_MSG_SIZE";
+const DELTA_TOLERANCE_VAR_NAME: &str = "MYRIAM_MESSAGE_AGE_TOLERANCE";
 
 /// max size of an incoming message cipher in bytes
 const DEFAULT_MAX_MESSAGE_SIZE: u32 = 8_388_608;
+
+const DEFAULT_DELTA_TOLERANCE: u64 = 10_000;
 
 pub async fn try_read_message<Message>(
     mut rd: ReadHalf<'_>,
@@ -53,6 +48,9 @@ pub async fn try_read_message<Message>(
 where
     Message: DeserializeOwned,
 {
+    //
+    // start by trying to read a public key, and verify we have a copy if it
+    //
     let mut key_buffer: [u8; KEY_BYTES] = [0; KEY_BYTES];
     rd.read_exact(&mut key_buffer).await?;
 
@@ -72,7 +70,9 @@ where
         AccessResolution::Denied => return Err(ReadError::Unauthorized),
     }
 
+    //
     // ignore the key given to us and fetch it again from our own store
+    //
     let public_identity = match auth_handle.fetch_identity(alleged_identity.hash()).await {
         Ok(id) => id,
         Err(e) => {
@@ -81,6 +81,47 @@ where
         }
     };
 
+    //
+    // try to decrypt and read a timestamp, and verify it is recent enough
+    //
+    let mut timestamp_nonce_buffer: [u8; NONCE_BYTES] = [0; NONCE_BYTES];
+    rd.read_exact(&mut timestamp_nonce_buffer).await?;
+
+    let mut timestamp_buffer: [u8; TIMESTAMP_CIPHER_BYTES] = [0; TIMESTAMP_CIPHER_BYTES];
+    rd.read_exact(&mut timestamp_buffer).await?;
+
+    let self_identity = auth_handle.fetch_self_identity().await?;
+
+    let timestamp: i64 = match crypto::try_decrypt(
+        &timestamp_buffer,
+        &timestamp_nonce_buffer,
+        &public_identity,
+        &self_identity,
+    ) {
+        Ok(vec) => match vec.as_slice().try_into() {
+            Ok(bytes) => i64::from_be_bytes(bytes),
+            Err(_) => return Err(ReadError::InvalidMessage),
+        },
+        Err(_) => return Err(ReadError::Unauthorized),
+    };
+
+    let tolerance: u64 = match std::env::var(DELTA_TOLERANCE_VAR_NAME) {
+        Ok(s) => match s.parse::<u64>() {
+            Ok(s) => s,
+            Err(_) => DEFAULT_DELTA_TOLERANCE,
+        },
+        Err(_) => DEFAULT_DELTA_TOLERANCE,
+    };
+
+    let now = chrono::Utc::now().timestamp_millis();
+    if now.abs_diff(timestamp) > tolerance {
+        return Err(ReadError::Unauthorized);
+    }
+
+    //
+    // now read the nonce, the size of the message cipher, and the message cipher itself
+    // so we can try to decrypt it
+    //
     let mut nonce_buffer: [u8; NONCE_BYTES] = [0; NONCE_BYTES];
     rd.read_exact(&mut nonce_buffer).await?;
 
@@ -117,10 +158,8 @@ where
         alleged_identity.hash()
     );
 
-    let self_identity = auth_handle.fetch_self_identity().await?;
-
     let message_bytes = crypto::try_decrypt(
-        cipher_buffer,
+        cipher_buffer.as_slice(),
         &nonce_buffer,
         &public_identity,
         self_identity.as_ref(),
@@ -138,24 +177,35 @@ where
 
 pub async fn try_write_message<Message>(
     message: Message,
-    id: &PublicIdentity,
     mut wr: WriteHalf<'_>,
+    public_identity: &PublicIdentity,
     self_identity: Arc<SelfIdentity>,
 ) -> Result<(), WriteError>
 where
     Message: Serialize,
 {
     let message_bytes = bincode::serialize(&message)?;
-    let (cipher, nonce) = crypto::try_encrypt(&message_bytes, id, self_identity.as_ref())?;
+    let (cipher, nonce) =
+        crypto::try_encrypt(&message_bytes, public_identity, self_identity.as_ref())?;
     let message_size = (cipher.len() as u32).to_be_bytes();
+
+    let timestamp = chrono::Utc::now().timestamp_millis();
+
+    let (timestamp_cipher, timestamp_nonce) = crypto::try_encrypt(
+        &timestamp.to_be_bytes(),
+        public_identity,
+        self_identity.as_ref(),
+    )?;
 
     tracing::debug!(
         "Sending message to {} with size {}.",
-        id.hash(),
+        public_identity.hash(),
         cipher.len()
     );
 
     wr.write_all(self_identity.public_as_bytes()).await?;
+    wr.write_all(&timestamp_nonce).await?;
+    wr.write_all(&timestamp_cipher).await?;
     wr.write_all(&nonce).await?;
     wr.write_all(&message_size).await?;
     wr.write_all(&cipher).await?;

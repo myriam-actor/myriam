@@ -154,7 +154,7 @@ where
                         Err(_) => return,
                     };
 
-                    if (net::try_write_message(response, &identity, wr, self_identity).await)
+                    if (net::try_write_message(response, wr, &identity, self_identity).await)
                         .is_err()
                     {
                         tracing::warn!("Failed to write response to trusted request. Maybe the reader dropped?");
@@ -219,7 +219,7 @@ impl ActorHandle {
         };
 
         let (rd, wr) = stream.split();
-        if net::try_write_message::<Message<T>>(message, &self.identity, wr, self_identity)
+        if net::try_write_message::<Message<T>>(message, wr, &self.identity, self_identity)
             .await
             .is_err()
         {

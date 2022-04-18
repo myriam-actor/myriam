@@ -9,14 +9,17 @@ pub const KEY_BYTES: usize = 32;
 /// size in bytes of NaCl's `crypto_box` nonce
 pub const NONCE_BYTES: usize = 24;
 
+/// size of the timestamp of a message in bytes
+pub const TIMESTAMP_CIPHER_BYTES: usize = 24;
+
 pub fn try_decrypt(
-    cipher: Vec<u8>,
+    cipher: &[u8],
     nonce: &[u8; NONCE_BYTES],
     public_id: &PublicIdentity,
     self_id: &SelfIdentity,
 ) -> Result<Vec<u8>, DecryptionError> {
     let decrypt_box = crypto_box::Box::new(public_id.key(), self_id.secret());
-    Ok(decrypt_box.decrypt(nonce.into(), cipher.as_slice())?)
+    Ok(decrypt_box.decrypt(nonce.into(), cipher)?)
 }
 
 pub fn try_encrypt(
@@ -61,7 +64,7 @@ mod tests {
 
         assert_eq!(
             message,
-            &try_decrypt(cipher, &nonce, alice.public_identity(), &bob).unwrap()[..]
+            &try_decrypt(cipher.as_slice(), &nonce, alice.public_identity(), &bob).unwrap()[..]
         );
     }
 }

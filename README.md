@@ -10,6 +10,7 @@ Displaimer: This API is a. EXTREMELY unstable at the moment and b. not guarantee
 
 * Message size cap (in bytes): can be set with via env var `MYRIAM_MAX_MSG_SIZE`. Default is `8_388_608`.
 * Message recv timeout (in milliseconds): can be set via `ActorOpts` when spawning or globally with the env var `MYRIAM_READ_TIMEOUT`.
+* Message age tolerance (in milliseconds): can be set via `MYRIAM_MESSAGE_AGE_TOLERANCE` env var. Default is (`10_000`) 10 seconds.
 
 See the `example` directory for the nitty-gritty.
 
