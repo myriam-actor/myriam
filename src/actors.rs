@@ -6,6 +6,7 @@
 use std::{io, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
+use lazy_static::lazy_static;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{
@@ -26,6 +27,15 @@ const MAX_READ_TIMEOUT_VAR_NAME: &str = "MYRIAM_READ_TIMEOUT";
 
 /// max time to wait for incoming message in milliseconds
 const DEFAULT_MAX_READ_TIMEOUT: u64 = 30_000;
+lazy_static! {
+    static ref MAX_READ_TIMEOUT: u64 = match std::env::var(MAX_READ_TIMEOUT_VAR_NAME) {
+        Ok(s) => match s.parse::<u64>() {
+            Ok(t) => t,
+            Err(_) => DEFAULT_MAX_READ_TIMEOUT,
+        },
+        Err(_) => DEFAULT_MAX_READ_TIMEOUT,
+    };
+}
 
 ///
 /// Actor is a trait. You only have to implement a handle method for your type.
@@ -73,13 +83,7 @@ where
 
     let read_timeout: u64 = match opts.read_timeout {
         Some(t) => t,
-        None => match std::env::var(MAX_READ_TIMEOUT_VAR_NAME) {
-            Ok(s) => match s.parse::<u64>() {
-                Ok(t) => t,
-                Err(_) => DEFAULT_MAX_READ_TIMEOUT,
-            },
-            Err(_) => DEFAULT_MAX_READ_TIMEOUT,
-        },
+        None => *MAX_READ_TIMEOUT,
     };
 
     let self_identity = auth.fetch_self_identity().await?;

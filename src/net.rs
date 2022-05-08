@@ -19,6 +19,7 @@
 
 use std::{net::IpAddr, sync::Arc};
 
+use lazy_static::lazy_static;
 use serde::{de::DeserializeOwned, Serialize};
 use thiserror::Error;
 use tokio::{
@@ -37,6 +38,23 @@ const DELTA_TOLERANCE_VAR_NAME: &str = "MYRIAM_MESSAGE_AGE_TOLERANCE";
 
 /// max size of an incoming message cipher in bytes
 const DEFAULT_MAX_MESSAGE_SIZE: u32 = 8_388_608;
+
+lazy_static! {
+    static ref MAX_MESSAGE_SIZE: u32 = match std::env::var(MAX_MSG_SIZE_VAR_NAME) {
+        Ok(s) => match s.parse::<u32>() {
+            Ok(s) => s,
+            Err(_) => DEFAULT_MAX_MESSAGE_SIZE,
+        },
+        Err(_) => DEFAULT_MAX_MESSAGE_SIZE,
+    };
+    static ref DELTA_TOLERANCE: u64 = match std::env::var(DELTA_TOLERANCE_VAR_NAME) {
+        Ok(s) => match s.parse::<u64>() {
+            Ok(s) => s,
+            Err(_) => DEFAULT_DELTA_TOLERANCE,
+        },
+        Err(_) => DEFAULT_DELTA_TOLERANCE,
+    };
+}
 
 const DEFAULT_DELTA_TOLERANCE: u64 = 10_000;
 
@@ -105,16 +123,8 @@ where
         Err(_) => return Err(ReadError::Unauthorized),
     };
 
-    let tolerance: u64 = match std::env::var(DELTA_TOLERANCE_VAR_NAME) {
-        Ok(s) => match s.parse::<u64>() {
-            Ok(s) => s,
-            Err(_) => DEFAULT_DELTA_TOLERANCE,
-        },
-        Err(_) => DEFAULT_DELTA_TOLERANCE,
-    };
-
     let now = chrono::Utc::now().timestamp_millis();
-    if now.abs_diff(timestamp) > tolerance {
+    if now.abs_diff(timestamp) > *DELTA_TOLERANCE {
         return Err(ReadError::Unauthorized);
     }
 
@@ -128,16 +138,8 @@ where
     let mut size_buffer: [u8; 4] = [0; 4];
     rd.read_exact(&mut size_buffer).await?;
 
-    let max_size: u32 = match std::env::var(MAX_MSG_SIZE_VAR_NAME) {
-        Ok(s) => match s.parse::<u32>() {
-            Ok(s) => s,
-            Err(_) => DEFAULT_MAX_MESSAGE_SIZE,
-        },
-        Err(_) => DEFAULT_MAX_MESSAGE_SIZE,
-    };
-
     let size = u32::from_be_bytes(size_buffer);
-    if size > max_size {
+    if size > *MAX_MESSAGE_SIZE {
         tracing::warn!(
             "Incoming message with ID hash {} exceeded allowed cipher size. Dropping.",
             alleged_identity.hash(),
