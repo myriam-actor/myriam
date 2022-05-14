@@ -20,7 +20,7 @@ mod tests {
         address::Address,
         auth::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore},
         identity::SelfIdentity,
-        messaging::{MessageContext, MessageType, TaskResult},
+        messaging::{MessageContext, MessageType, MessagingError, TaskResult},
     };
 
     struct Autho;
@@ -130,5 +130,61 @@ mod tests {
             }
             Err(err) => panic!("could not get response: {err}"),
         }
+    }
+
+    #[tokio::test]
+    async fn actually_stops() {
+        let actor_self_identity = SelfIdentity::new();
+        let actor_auth_handle = Autho::spawn(actor_self_identity.clone()).await;
+
+        let client_self_identity = SelfIdentity::new();
+        let client_auth_handle = Autho::spawn(client_self_identity.clone()).await;
+
+        actor_auth_handle
+            .store_identity(client_self_identity.public_identity().clone())
+            .await
+            .unwrap();
+
+        client_auth_handle
+            .store_identity(actor_self_identity.public_identity().clone())
+            .await
+            .unwrap();
+
+        let opts = ActorOptions {
+            host: "::1".into(),
+            port: None,
+            read_timeout: Some(2000),
+        };
+
+        let actor = MyActor::new();
+        let (actor_handle, _) = actors::spawn(Box::new(actor), opts, actor_auth_handle.clone())
+            .await
+            .unwrap();
+
+        let stop_response = actor_handle
+            .send::<String, String, SomeError>(
+                MessageType::Stop,
+                MessageContext::Yielding,
+                &client_auth_handle,
+            )
+            .await;
+
+        assert!(matches!(
+            stop_response,
+            Result::<TaskResult<String>, MessagingError<SomeError>>::Ok(TaskResult::Accepted)
+        ));
+
+        let ping_response = actor_handle
+            .send::<String, String, SomeError>(
+                MessageType::Ping,
+                MessageContext::Yielding,
+                &client_auth_handle,
+            )
+            .await;
+
+        assert!(matches!(
+            ping_response,
+            Result::<TaskResult<String>, MessagingError<SomeError>>::Err(MessagingError::Transport)
+        ));
     }
 }

@@ -100,75 +100,76 @@ where
         let (stop_tx, mut stop_rx) = mpsc::channel::<()>(100);
         let actor = Arc::new(actor);
 
-        // TODO: what if .accept() fails?
-        while let Ok((mut socket, addr)) = listener.accept().await {
-            if stop_rx.try_recv().is_ok() {
-                break;
-            }
-
-            let context = context.clone();
-            let auth_handle = auth_handle.clone();
-            let self_identity = self_identity.clone();
-            let stop_tx = stop_tx.clone();
-            let actor = actor.clone();
-
-            tokio::spawn(async move {
-                let (rd, wr) = socket.split();
-                if let Ok(Ok((message, identity))) = tokio::time::timeout(
-                    Duration::from_millis(read_timeout),
-                    net::try_read_message::<Message<T>>(rd, &auth_handle, addr.ip()),
-                )
-                .await
-                {
-                    let (tx, rx) = oneshot::channel::<MessageResult<U, E>>();
+        loop {
+            tokio::select! {
+                _ = stop_rx.recv() => return,
+                Ok((mut socket, addr)) = listener.accept() => {
+                    let context = context.clone();
+                    let auth_handle = auth_handle.clone();
+                    let self_identity = self_identity.clone();
+                    let stop_tx = stop_tx.clone();
+                    let actor = actor.clone();
 
                     tokio::spawn(async move {
-                        match message.message_type {
-                            MessageType::Ping => {
-                                let _ = tx.send(Ok(TaskResult::Accepted));
-                            }
-                            MessageType::Stop => {
-                                let _ = stop_tx.send(());
-                                let _ = tx.send(Ok(TaskResult::Accepted));
-                            }
-                            MessageType::Task(arg) => match message.context {
-                                MessageContext::NonYielding => {
-                                    tokio::spawn(async move {
-                                        let _ = actor.handle(&context, message.sender, arg).await;
-                                    });
+                        let (rd, wr) = socket.split();
+                        if let Ok(Ok((message, identity))) = tokio::time::timeout(
+                            Duration::from_millis(read_timeout),
+                            net::try_read_message::<Message<T>>(rd, &auth_handle, addr.ip()),
+                        )
+                            .await
+                        {
+                            let (tx, rx) = oneshot::channel::<MessageResult<U, E>>();
 
-                                    let _ = tx.send(Ok(TaskResult::Accepted));
-                                }
-                                MessageContext::Yielding => {
-                                    match actor.handle(&context, message.sender, arg).await {
-                                        Ok(res) => {
-                                            let _ = tx.send(Ok(TaskResult::Finished(res)));
-                                        }
-                                        Err(err) => {
-                                            let _ = tx.send(Err(MessagingError::Task(err)));
-                                        }
+                            tokio::spawn(async move {
+                                match message.message_type {
+                                    MessageType::Ping => {
+                                        let _ = tx.send(Ok(TaskResult::Accepted));
                                     }
+                                    MessageType::Stop => {
+                                        let _ = stop_tx.send(()).await;
+                                        let _ = tx.send(Ok(TaskResult::Accepted));
+                                    }
+                                    MessageType::Task(arg) => match message.context {
+                                        MessageContext::NonYielding => {
+                                            tokio::spawn(async move {
+                                                let _ = actor.handle(&context, message.sender, arg).await;
+                                            });
+
+                                            let _ = tx.send(Ok(TaskResult::Accepted));
+                                        }
+                                        MessageContext::Yielding => {
+                                            match actor.handle(&context, message.sender, arg).await {
+                                                Ok(res) => {
+                                                    let _ = tx.send(Ok(TaskResult::Finished(res)));
+                                                }
+                                                Err(err) => {
+                                                    let _ = tx.send(Err(MessagingError::Task(err)));
+                                                }
+                                            }
+                                        }
+                                    },
                                 }
-                            },
+                            });
+
+                            let response = match rx.await {
+                                Ok(res) => res,
+                                Err(_) => return,
+                            };
+
+                            if (net::try_write_message(response, wr, &identity, self_identity).await)
+                                .is_err()
+                            {
+                                tracing::warn!("Failed to write response to trusted request. Maybe the reader dropped?");
+                            }
+                        } else {
+                            tracing::warn!(
+                                "Got an incoming message, but failed to read it entirely. Dropping connection."
+                            );
                         }
                     });
-
-                    let response = match rx.await {
-                        Ok(res) => res,
-                        Err(_) => return,
-                    };
-
-                    if (net::try_write_message(response, wr, &identity, self_identity).await)
-                        .is_err()
-                    {
-                        tracing::warn!("Failed to write response to trusted request. Maybe the reader dropped?");
-                    }
-                } else {
-                    tracing::warn!(
-                        "Got an incoming message, but failed to read it entirely. Dropping connection."
-                    );
-                }
-            });
+                },
+                else => ()
+            }
         }
     });
 
