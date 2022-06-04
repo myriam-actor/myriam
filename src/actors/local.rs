@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use async_trait::async_trait;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
@@ -9,15 +7,12 @@ use crate::address::Address;
 use super::Context;
 
 #[async_trait]
-pub trait Actor {
+pub trait Actor: 'static {
     type Input: Send + 'static;
     type Output: Send + 'static;
     type Error: Send + 'static;
 
-    async fn spawn(mut self: Box<Self>) -> LocalHandle<Self::Input, Self::Output, Self::Error>
-    where
-        Self: 'static,
-    {
+    async fn spawn(mut self: Box<Self>) -> LocalHandle<Self::Input, Self::Output, Self::Error> {
         let (tx, mut rx) =
             mpsc::channel::<LocalMessage<Self::Input, Self::Output, Self::Error>>(1024);
 

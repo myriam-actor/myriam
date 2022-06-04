@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-#![allow(unused)]
 
 pub mod actors;
 pub mod address;

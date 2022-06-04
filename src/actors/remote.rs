@@ -15,9 +15,7 @@ use crate::{
     address::{Address, AddressError},
     auth::{AuthError, AuthHandle},
     identity::PublicIdentity,
-    messaging::{
-        self, Message, MessageContext, MessageResult, MessageType, MessagingError, TaskResult,
-    },
+    messaging::{Message, MessageContext, MessageResult, MessageType, MessagingError, TaskResult},
     net,
 };
 
@@ -104,7 +102,7 @@ where
                                     MessageType::Task(arg) => match message.context {
                                         MessageContext::NonYielding => {
                                             tokio::spawn(async move {
-                                                let res = local_handle.send_local(arg, Some((*context).clone()), message.sender).await;
+                                                let _ = local_handle.send_local(arg, Some((*context).clone()), message.sender).await;
                                             });
 
                                             let _ = tx.send(Ok(TaskResult::Accepted));
