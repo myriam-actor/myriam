@@ -7,7 +7,7 @@ use crate::address::Address;
 use super::Context;
 
 #[async_trait]
-pub trait Actor: 'static {
+pub trait Actor: Send + 'static {
     type Input: Send + 'static;
     type Output: Send + 'static;
     type Error: Send + 'static;
