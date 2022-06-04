@@ -1,4 +1,5 @@
 #![doc = include_str!("../README.md")]
+#![allow(unused)]
 
 pub mod actors;
 pub mod address;
@@ -16,7 +17,7 @@ mod tests {
     use tracing_subscriber::EnvFilter;
 
     use crate::{
-        actors::{self, Actor, ActorOptions, Context},
+        actors::{self, local::Actor, ActorOptions, Context},
         address::Address,
         auth::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore},
         identity::SelfIdentity,
@@ -66,8 +67,8 @@ mod tests {
         type Error = SomeError;
 
         async fn handle(
-            &self,
-            _ctx: &Context,
+            &mut self,
+            _ctx: Option<Context>,
             _addr: Option<Address>,
             arg: Self::Input,
         ) -> Result<Self::Output, Self::Error> {
@@ -107,9 +108,10 @@ mod tests {
         };
 
         let actor = MyActor::new();
-        let (actor_handle, _) = actors::spawn(Box::new(actor), opts, actor_auth_handle.clone())
-            .await
-            .unwrap();
+        let (actor_handle, _) =
+            actors::remote::spawn(Box::new(actor), opts, actor_auth_handle.clone())
+                .await
+                .unwrap();
 
         let response = actor_handle
             .send::<String, String, SomeError>(
@@ -157,9 +159,10 @@ mod tests {
         };
 
         let actor = MyActor::new();
-        let (actor_handle, _) = actors::spawn(Box::new(actor), opts, actor_auth_handle.clone())
-            .await
-            .unwrap();
+        let (actor_handle, _) =
+            actors::remote::spawn(Box::new(actor), opts, actor_auth_handle.clone())
+                .await
+                .unwrap();
 
         let stop_response = actor_handle
             .send::<String, String, SomeError>(

@@ -6,7 +6,7 @@
 
 use async_trait::async_trait;
 use myriam::{
-    actors::ActorHandle,
+    actors::remote::ActorHandle,
     address::Address,
     auth::{AccessResolution, AuthActor},
     identity::{PublicIdentity, SelfIdentity},

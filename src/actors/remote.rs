@@ -1,25 +1,23 @@
-//!
-//! Here you will find the "core" of this implementation. Particularly, the [Actor] trait, with a generic handler and a spawning function.
-//! Additionally, we define a handler which is itself used to send messages to an actor.
-//!
+use std::{sync::Arc, time::Duration};
 
-use std::{io, sync::Arc, time::Duration};
-
-use async_trait::async_trait;
 use lazy_static::lazy_static;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use thiserror::Error;
 use tokio::{
+    io,
     net::{TcpListener, TcpStream},
     sync::{mpsc, oneshot},
     task::JoinHandle,
 };
 
 use crate::{
+    actors::{local::LocalMessagingError, Context},
     address::{Address, AddressError},
     auth::{AuthError, AuthHandle},
     identity::PublicIdentity,
-    messaging::{Message, MessageContext, MessageResult, MessageType, MessagingError, TaskResult},
+    messaging::{
+        self, Message, MessageContext, MessageResult, MessageType, MessagingError, TaskResult,
+    },
     net,
 };
 
@@ -37,35 +35,8 @@ lazy_static! {
     };
 }
 
-///
-/// Actor is a trait. You only have to implement a handle method for your type.
-///
-/// [Actor::Input], [Actor::Output] and [Actor::Error] correspond to the input and result types of the task implemented as [Actor::handle]
-///
-#[async_trait]
-pub trait Actor {
-    type Input: DeserializeOwned + Send + 'static;
-    type Output: Serialize + Send + 'static;
-    type Error: Serialize + Send + 'static;
+use super::{local::Actor, ActorOptions};
 
-    ///
-    /// Handling method for incoming messages.
-    ///
-    /// `ctx` contains the actors' own address, while `addr` (if present) correspond to the address of the actor that sent the message.
-    ///
-    async fn handle(
-        &self,
-        ctx: &Context,
-        addr: Option<Address>,
-        arg: Self::Input,
-    ) -> Result<Self::Output, Self::Error>;
-}
-
-///
-/// Take ownership of a dyn Actor though a Box and spawn an instance of it.
-///
-/// If all goes well, returns a handle to the actor and the `JoinHandle<()>` of its internal task.
-///
 pub async fn spawn<T, U, E>(
     actor: Box<dyn Actor<Input = T, Output = U, Error = E> + Send + Sync>,
     opts: ActorOptions,
@@ -89,6 +60,8 @@ where
     let self_identity = auth.fetch_self_identity().await?;
     let public_identity = self_identity.public_identity().clone();
 
+    let local_handle = Arc::new(actor.spawn().await);
+
     let context = Arc::new(Context {
         self_address: address.clone(),
     });
@@ -98,7 +71,6 @@ where
     tracing::debug!("new actor listening on {}", listener.local_addr().unwrap());
     let task_handle = tokio::spawn(async move {
         let (stop_tx, mut stop_rx) = mpsc::channel::<()>(100);
-        let actor = Arc::new(actor);
 
         loop {
             tokio::select! {
@@ -108,7 +80,7 @@ where
                     let auth_handle = auth_handle.clone();
                     let self_identity = self_identity.clone();
                     let stop_tx = stop_tx.clone();
-                    let actor = actor.clone();
+                    let local_handle = local_handle.clone();
 
                     tokio::spawn(async move {
                         let (rd, wr) = socket.split();
@@ -132,18 +104,23 @@ where
                                     MessageType::Task(arg) => match message.context {
                                         MessageContext::NonYielding => {
                                             tokio::spawn(async move {
-                                                let _ = actor.handle(&context, message.sender, arg).await;
+                                                let res = local_handle.send_local(arg, Some((*context).clone()), message.sender).await;
                                             });
 
                                             let _ = tx.send(Ok(TaskResult::Accepted));
                                         }
                                         MessageContext::Yielding => {
-                                            match actor.handle(&context, message.sender, arg).await {
+                                            let res = local_handle.send_local(arg, Some((*context).clone()), message.sender).await;
+                                            match res {
                                                 Ok(res) => {
                                                     let _ = tx.send(Ok(TaskResult::Finished(res)));
                                                 }
                                                 Err(err) => {
-                                                    let _ = tx.send(Err(MessagingError::Task(err)));
+                                                    if let LocalMessagingError::Task(err) = err {
+                                                        let _ = tx.send(Err(MessagingError::Task(err)));
+                                                    } else {
+                                                        let _ = tx.send(Err(MessagingError::Internal));
+                                                    }
                                                 }
                                             }
                                         }
@@ -255,20 +232,6 @@ impl ActorHandle {
     {
         self.send_from(msg, ctx, None, auth_handle).await
     }
-}
-
-pub struct ActorOptions {
-    pub host: String,
-    pub port: Option<u16>,
-    pub read_timeout: Option<u64>,
-}
-
-///
-/// Struct passed to [Actor::handle] containing the address of itself.
-///
-#[derive(Clone)]
-pub struct Context {
-    pub self_address: Address,
 }
 
 #[derive(Debug, Error)]

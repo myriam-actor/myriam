@@ -6,7 +6,7 @@
 
 use async_trait::async_trait;
 use myriam::{
-    actors::{self, Actor},
+    actors::{self, local::Actor},
     auth::{AccessResolution, AuthActor},
     identity::{PublicIdentity, SelfIdentity},
 };
@@ -44,8 +44,8 @@ impl Actor for EchoActor {
     type Error = SomeError;
 
     async fn handle(
-        &self,
-        _ctx: &myriam::actors::Context,
+        &mut self,
+        _ctx: Option<myriam::actors::Context>,
         _addr: Option<myriam::address::Address>,
         arg: Self::Input,
     ) -> Result<Self::Output, Self::Error> {
@@ -78,7 +78,7 @@ async fn main() {
     };
 
     let actor = EchoActor;
-    let (_, task) = actors::spawn(Box::new(actor), opts, auth)
+    let (_, task) = actors::remote::spawn(Box::new(actor), opts, auth)
         .await
         .expect("failed to spawn actor");
 

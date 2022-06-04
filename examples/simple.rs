@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use myriam::{
-    actors::{self, Actor, ActorHandle, ActorOptions, Context},
+    actors::{self, local::Actor, remote::ActorHandle, ActorOptions, Context},
     address::Address,
     auth::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore},
     identity::{PublicIdentity, SelfIdentity},
@@ -28,8 +28,8 @@ impl Actor for Kawaiifier {
     type Error = SomeError;
 
     async fn handle(
-        &self,
-        _ctx: &Context,
+        &mut self,
+        _ctx: Option<Context>,
         _addr: Option<Address>,
         arg: Self::Input,
     ) -> Result<Self::Output, Self::Error> {
@@ -69,7 +69,7 @@ async fn spawn(sender_id: PublicIdentity) -> ActorHandle {
     };
 
     let actor = Kawaiifier::new("nya".into());
-    actors::spawn(Box::new(actor), opts, handle)
+    actors::remote::spawn(Box::new(actor), opts, handle)
         .await
         .expect("failed to spawn actor")
         .0
