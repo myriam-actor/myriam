@@ -35,6 +35,10 @@ lazy_static! {
 
 use super::{local::Actor, ActorOptions};
 
+///
+/// Take and consume a boxed actor, and spawn an instance ready to accept messages.
+/// If successful, will return the actor's handle and a JoinHandle for its task.
+///
 pub async fn spawn<T, U, E>(
     actor: Box<dyn Actor<Input = T, Output = U, Error = E> + Send + Sync>,
     opts: ActorOptions,
@@ -169,6 +173,9 @@ pub struct ActorHandle {
 }
 
 impl ActorHandle {
+    ///
+    /// Send a message to an actor, giving it our own address.
+    ///
     pub async fn send_from<T, U, E>(
         &self,
         msg: MessageType<T>,
@@ -217,6 +224,10 @@ impl ActorHandle {
         }
     }
 
+    ///
+    /// Send a message to an actor.
+    /// Meant to be used from "top level" code, since a "callback" address is not given.
+    ///
     pub async fn send<T, U, E>(
         &self,
         msg: MessageType<T>,

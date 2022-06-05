@@ -6,6 +6,10 @@ use crate::address::Address;
 
 use super::Context;
 
+///
+/// Main Actor trait.
+/// Can technically be used for local actors, but internally we wrap around them to offer remote actors.
+///
 #[async_trait]
 pub trait Actor: Send + 'static {
     type Input: Send + 'static;
@@ -125,5 +129,48 @@ where
 
     pub async fn send(&self, body: I) -> Result<O, LocalMessagingError<E>> {
         self.send_local(body, None, None).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use async_trait::async_trait;
+
+    use super::Actor;
+
+    struct TestActor {
+        counter: i32,
+    }
+
+    #[derive(Debug)]
+    struct SomeError;
+
+    #[async_trait]
+    impl Actor for TestActor {
+        type Input = i32;
+
+        type Output = i32;
+
+        type Error = SomeError;
+
+        async fn handle(
+            &mut self,
+            _ctx: Option<crate::actors::Context>,
+            _addr: Option<crate::address::Address>,
+            arg: Self::Input,
+        ) -> Result<Self::Output, Self::Error> {
+            self.counter *= arg;
+            Ok(self.counter)
+        }
+    }
+
+    #[tokio::test]
+    async fn spawn_and_message() {
+        let actor = TestActor { counter: 15 };
+        let handle = Box::new(actor).spawn().await;
+
+        let result = handle.send(3).await.unwrap();
+
+        assert_eq!(45, result);
     }
 }
