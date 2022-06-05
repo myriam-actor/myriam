@@ -16,7 +16,7 @@ mod tests {
     use tracing_subscriber::EnvFilter;
 
     use crate::{
-        actors::{self, local::Actor, ActorOptions, Context},
+        actors::{self, local::Actor},
         address::Address,
         auth::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore},
         identity::SelfIdentity,
@@ -49,12 +49,14 @@ mod tests {
 
     struct MyActor {
         postfix: String,
+        address: Address,
     }
 
     impl MyActor {
         fn new() -> Self {
             Self {
                 postfix: "nya".into(),
+                address: Address::new_with_random_port("::1").expect("failed to create address"),
             }
         }
     }
@@ -67,7 +69,6 @@ mod tests {
 
         async fn handle(
             &mut self,
-            _ctx: Option<Context>,
             _addr: Option<Address>,
             arg: Self::Input,
         ) -> Result<Self::Output, Self::Error> {
@@ -76,6 +77,10 @@ mod tests {
             } else {
                 Ok(format!("{}-{}", arg.to_uppercase(), &self.postfix))
             }
+        }
+
+        fn get_self(&self) -> Address {
+            self.address.clone()
         }
     }
 
@@ -100,13 +105,8 @@ mod tests {
             .await
             .unwrap();
 
-        let opts = ActorOptions {
-            host: "::1".into(),
-            port: None,
-            read_timeout: Some(2000),
-        };
-
         let actor = MyActor::new();
+        let opts = actor.spawn_options(None);
         let (actor_handle, _) =
             actors::remote::spawn(Box::new(actor), opts, actor_auth_handle.clone())
                 .await
@@ -151,13 +151,8 @@ mod tests {
             .await
             .unwrap();
 
-        let opts = ActorOptions {
-            host: "::1".into(),
-            port: None,
-            read_timeout: Some(2000),
-        };
-
         let actor = MyActor::new();
+        let opts = actor.spawn_options(None);
         let (actor_handle, _) =
             actors::remote::spawn(Box::new(actor), opts, actor_auth_handle.clone())
                 .await

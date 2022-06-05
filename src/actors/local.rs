@@ -4,7 +4,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::address::Address;
 
-use super::Context;
+use super::ActorOptions;
 
 ///
 /// Main Actor trait.
@@ -25,11 +25,10 @@ pub trait Actor: Send + 'static {
                 let LocalMessage {
                     body,
                     return_channel,
-                    context,
                     sender,
                 } = msg;
                 let res = self
-                    .handle(context, sender, body)
+                    .handle(sender, body)
                     .await
                     .map_err(LocalMessagingError::Task);
 
@@ -40,18 +39,34 @@ pub trait Actor: Send + 'static {
         LocalHandle::new(tx)
     }
 
+    ///
+    /// Convenience method to get the (remote) spawn options for this actor
+    ///
+    fn spawn_options(&self, timeout: Option<u64>) -> ActorOptions {
+        let Address { host, port } = self.get_self();
+        ActorOptions {
+            host,
+            port: Some(port),
+            read_timeout: timeout,
+        }
+    }
+
     async fn handle(
         &mut self,
-        ctx: Option<Context>,
         addr: Option<Address>,
         arg: Self::Input,
     ) -> Result<Self::Output, Self::Error>;
+
+    ///
+    /// Objects implementing this trait should have some way to query
+    /// their own address
+    ///
+    fn get_self(&self) -> Address;
 }
 
 #[derive(Debug)]
 struct LocalMessage<I: Send + 'static, O: Send + 'static, E: Send + 'static> {
     body: I,
-    context: Option<Context>,
     sender: Option<Address>,
     return_channel: oneshot::Sender<Result<O, LocalMessagingError<E>>>,
 }
@@ -64,7 +79,6 @@ where
 {
     fn new(
         i: I,
-        ctx: Option<Context>,
         sender: Option<Address>,
     ) -> (Self, oneshot::Receiver<Result<O, LocalMessagingError<E>>>) {
         let (tx, rx) = oneshot::channel();
@@ -72,7 +86,6 @@ where
             Self {
                 body: i,
                 return_channel: tx,
-                context: ctx,
                 sender,
             },
             rx,
@@ -115,10 +128,9 @@ where
     pub async fn send_local(
         &self,
         body: I,
-        context: Option<Context>,
         sender: Option<Address>,
     ) -> Result<O, LocalMessagingError<E>> {
-        let (msg, channel) = LocalMessage::new(body, context, sender);
+        let (msg, channel) = LocalMessage::new(body, sender);
         self.sender
             .send(msg)
             .await
@@ -128,7 +140,7 @@ where
     }
 
     pub async fn send(&self, body: I) -> Result<O, LocalMessagingError<E>> {
-        self.send_local(body, None, None).await
+        self.send_local(body, None).await
     }
 }
 
@@ -136,10 +148,22 @@ where
 mod tests {
     use async_trait::async_trait;
 
+    use crate::address::Address;
+
     use super::Actor;
 
     struct TestActor {
         counter: i32,
+        self_address: Address,
+    }
+
+    impl TestActor {
+        fn new(initial_count: i32) -> Self {
+            Self {
+                counter: initial_count,
+                self_address: Address::new_with_random_port("127.0.0.1").unwrap(),
+            }
+        }
     }
 
     #[derive(Debug)]
@@ -155,18 +179,21 @@ mod tests {
 
         async fn handle(
             &mut self,
-            _ctx: Option<crate::actors::Context>,
             _addr: Option<crate::address::Address>,
             arg: Self::Input,
         ) -> Result<Self::Output, Self::Error> {
             self.counter *= arg;
             Ok(self.counter)
         }
+
+        fn get_self(&self) -> Address {
+            self.self_address.clone()
+        }
     }
 
     #[tokio::test]
     async fn spawn_and_message() {
-        let actor = TestActor { counter: 15 };
+        let actor = TestActor::new(15);
         let handle = Box::new(actor).spawn().await;
 
         let result = handle.send(3).await.unwrap();

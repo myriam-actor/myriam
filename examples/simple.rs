@@ -1,6 +1,10 @@
+//!
+//! "Simple" example of a minimal actor which mutates its own state
+//!
+
 use async_trait::async_trait;
 use myriam::{
-    actors::{self, local::Actor, remote::ActorHandle, ActorOptions, Context},
+    actors::{self, local::Actor, remote::ActorHandle},
     address::Address,
     auth::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore},
     identity::{PublicIdentity, SelfIdentity},
@@ -9,31 +13,39 @@ use myriam::{
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
-struct SomeError;
+struct CounterError;
 
-struct Kawaiifier {
-    postfix: String,
+struct Counter {
+    count: i32,
+    address: Address,
 }
 
-impl Kawaiifier {
-    fn new(postfix: String) -> Self {
-        Self { postfix }
+impl Counter {
+    fn new(init: i32) -> Self {
+        Self {
+            count: init,
+            address: Address::new_with_random_port("::1").expect("failed to parse address"),
+        }
     }
 }
 
 #[async_trait]
-impl Actor for Kawaiifier {
-    type Input = String;
-    type Output = String;
-    type Error = SomeError;
+impl Actor for Counter {
+    type Input = i32;
+    type Output = i32;
+    type Error = CounterError;
 
     async fn handle(
         &mut self,
-        _ctx: Option<Context>,
         _addr: Option<Address>,
         arg: Self::Input,
     ) -> Result<Self::Output, Self::Error> {
-        Ok(format!("{}-{}", arg, self.postfix))
+        self.count += arg;
+        Ok(self.count)
+    }
+
+    fn get_self(&self) -> Address {
+        self.address.clone()
     }
 }
 
@@ -62,13 +74,9 @@ async fn spawn(sender_id: PublicIdentity) -> ActorHandle {
         .await
         .expect("failed to insert sender public identity in store");
 
-    let opts = ActorOptions {
-        host: "::1".to_string(),
-        port: None,
-        read_timeout: None,
-    };
+    let actor = Counter::new(0);
+    let opts = actor.spawn_options(None);
 
-    let actor = Kawaiifier::new("nya".into());
     actors::remote::spawn(Box::new(actor), opts, handle)
         .await
         .expect("failed to spawn actor")
@@ -94,8 +102,8 @@ async fn main() {
         .expect("failed to insert actor public identity in store");
 
     let result = actor_handle
-        .send::<String, String, SomeError>(
-            MessageType::Task("something".into()),
+        .send::<i32, i32, CounterError>(
+            MessageType::Task(11),
             MessageContext::Yielding,
             &auth_handle,
         )
@@ -104,6 +112,6 @@ async fn main() {
 
     match result {
         TaskResult::Accepted => panic!("expected a value!"),
-        TaskResult::Finished(s) => println!("Result from actor response: {s}"),
+        TaskResult::Finished(s) => assert_eq!(11, s),
     }
 }

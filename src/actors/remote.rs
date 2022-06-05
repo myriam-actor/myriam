@@ -11,7 +11,7 @@ use tokio::{
 };
 
 use crate::{
-    actors::{local::LocalMessagingError, Context},
+    actors::local::LocalMessagingError,
     address::{Address, AddressError},
     auth::{AuthError, AuthHandle},
     identity::PublicIdentity,
@@ -64,9 +64,6 @@ where
 
     let local_handle = Arc::new(actor.spawn().await);
 
-    let context = Arc::new(Context {
-        self_address: address.clone(),
-    });
     let auth_handle = Arc::new(auth);
 
     let listener = TcpListener::bind(address.to_string()).await?;
@@ -78,7 +75,6 @@ where
             tokio::select! {
                 _ = stop_rx.recv() => return,
                 Ok((mut socket, addr)) = listener.accept() => {
-                    let context = context.clone();
                     let auth_handle = auth_handle.clone();
                     let self_identity = self_identity.clone();
                     let stop_tx = stop_tx.clone();
@@ -106,13 +102,13 @@ where
                                     MessageType::Task(arg) => match message.context {
                                         MessageContext::NonYielding => {
                                             tokio::spawn(async move {
-                                                let _ = local_handle.send_local(arg, Some((*context).clone()), message.sender).await;
+                                                let _ = local_handle.send_local(arg, message.sender).await;
                                             });
 
                                             let _ = tx.send(Ok(TaskResult::Accepted));
                                         }
                                         MessageContext::Yielding => {
-                                            let res = local_handle.send_local(arg, Some((*context).clone()), message.sender).await;
+                                            let res = local_handle.send_local(arg, message.sender).await;
                                             match res {
                                                 Ok(res) => {
                                                     let _ = tx.send(Ok(TaskResult::Finished(res)));

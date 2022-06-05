@@ -7,6 +7,7 @@
 use async_trait::async_trait;
 use myriam::{
     actors::{self, local::Actor},
+    address::Address,
     auth::{AccessResolution, AuthActor},
     identity::{PublicIdentity, SelfIdentity},
 };
@@ -33,7 +34,13 @@ impl AuthActor for LocalAuth {
 #[derive(Debug, Serialize, Deserialize)]
 struct SomeError;
 
-struct EchoActor;
+struct EchoActor(Address);
+
+impl EchoActor {
+    fn new() -> Self {
+        Self(Address::new_with_random_port("::1").expect("failed to parse address for actor"))
+    }
+}
 
 #[async_trait]
 impl Actor for EchoActor {
@@ -45,13 +52,16 @@ impl Actor for EchoActor {
 
     async fn handle(
         &mut self,
-        _ctx: Option<myriam::actors::Context>,
         _addr: Option<myriam::address::Address>,
         arg: Self::Input,
     ) -> Result<Self::Output, Self::Error> {
         println!("actor got {arg}, sending response!");
 
         Ok(arg.chars().rev().collect())
+    }
+
+    fn get_self(&self) -> myriam::address::Address {
+        self.0.clone()
     }
 }
 
@@ -71,13 +81,8 @@ async fn main() {
         .await
         .expect("failed to insert public identity in store");
 
-    let opts = actors::ActorOptions {
-        host: "::1".into(),
-        port: Some(3050),
-        read_timeout: None,
-    };
-
-    let actor = EchoActor;
+    let actor = EchoActor::new();
+    let opts = actor.spawn_options(None);
     let (_, task) = actors::remote::spawn(Box::new(actor), opts, auth)
         .await
         .expect("failed to spawn actor");

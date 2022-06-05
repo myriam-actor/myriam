@@ -17,8 +17,8 @@ use thiserror::Error;
 ///
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Address {
-    host: String,
-    port: u16,
+    pub host: String,
+    pub port: u16,
 }
 
 impl Address {
