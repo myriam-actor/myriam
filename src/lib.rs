@@ -1,187 +1,150 @@
-#![doc = include_str!("../README.md")]
+//!
+//! # myriam-rs
+//!
+//! Remote implementation of the actor model on top of libp2p.
+//!
+//! In `myriam`, an actor is any object that implements the `Actor` trait.
+//! Message handlers have a `Context` object which gives access to information such as
+//! the peer id and address of the sender.
+//!
+//! Authentication is taken care of automatically by `libp2p`, `myriam` offers an authorization
+//! actor trait which offers a way for users to hook their own authorization login to either accept,
+//! reject and even ban incoming messages from a peer. An AuthActor is required when spawning an actor
+//! (each actor has their own handle to an AuthActor) or sending a message from toplevel.
+//!
+//! Messaging is typically done from actor-to-actor. Messaging from "top level" is a bit of an
+//! outlier case, but offered by `myriam` as a convenience.
+//!
+//! ```rust
+//! use async_trait::async_trait;
+//! use libp2p::{identity::Keypair, multiaddr::Protocol};
+//! use myriam::{
+//!     actors::{
+//!         auth::{AccessRequest, AccessResolution, AddrStore, AuthActor, PeerStore},
+//!         opts::SpawnOpts,
+//!         Actor,
+//!         Context
+//!     },
+//!     models::{MessageType, TaskResult},
+//! };
+//! use serde::{Deserialize, Serialize};
+//! use tracing_subscriber::EnvFilter;
+//!
+//! #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
+//! #[error("failed to initialize counter")]
+//! struct CounterError;
+//!
+//! struct Counter {
+//!     count: i32,
+//! }
+//!
+//! impl Counter {
+//!     fn new(init: i32) -> Self {
+//!         Self { count: init }
+//!     }
+//! }
+//!
+//! #[async_trait]
+//! impl Actor for Counter {
+//!     type Input = i32;
+//!     type Output = i32;
+//!     type Error = CounterError;
+//!
+//!     async fn handle(
+//!         &mut self,
+//!         arg: Self::Input,
+//!         _: Context<Self::Output, Self::Error>,
+//!     ) -> Result<Self::Output, Self::Error> {
+//!         self.count += arg;
+//!
+//!         Ok(self.count)
+//!     }
+//!
+//!     async fn on_init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+//!         if self.count != 0 {
+//!             Err(Box::new(CounterError))
+//!         } else {
+//!             Ok(())
+//!         }
+//!     }
+//!
+//!     async fn on_stop(&self) {}
+//! }
+//!
+//! struct Autho;
+//!
+//! #[async_trait]
+//! impl AuthActor for Autho {
+//!     async fn resolve(
+//!         &mut self,
+//!         request: AccessRequest,
+//!         _: &mut AddrStore,
+//!         _: &mut PeerStore,
+//!     ) -> AccessResolution {
+//!         //
+//!         // only accept incoming requests from this machine
+//!         //
+//!         if let Some(address) = request.addr {
+//!             if address.iter().any(|p| match p {
+//!                 Protocol::Ip4(a) => a.is_loopback(),
+//!                 Protocol::Ip6(a) => a.is_loopback(),
+//!                 _ => false,
+//!             }) {
+//!                 AccessResolution::Accepted
+//!             } else {
+//!                 AccessResolution::Denied
+//!             }
+//!         } else {
+//!             AccessResolution::Denied
+//!         }
+//!     }
+//! }
+//!
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let filter = EnvFilter::from_default_env();
+//!     tracing_subscriber::fmt().with_env_filter(filter).init();
+//!
+//!     // create the keypair for this host
+//!     let keypair = Keypair::generate_ed25519();
+//!
+//!     // spawn an instance of our authenticator
+//!     let auth_handle = AuthActor::spawn(Box::new(Autho), keypair).await;
+//!
+//!     // spawn an actor using our authorization actor
+//!     // share this handle however you want
+//!     let actor = Box::new(Counter::new(0));
+//!     let (actor_handle, _) = actor
+//!         .spawn(auth_handle.clone(), SpawnOpts::default())
+//!         .await?;
+//!
+//!     //
+//!     // ... now, on another machine ...
+//!     //
+//!
+//!     let client_keypair = Keypair::generate_ed25519();
+//!     let client_auth_handle = AuthActor::spawn(Box::new(Autho), client_keypair).await;
+//!
+//!     let result = actor_handle
+//!         .send_toplevel::<i32, i32, CounterError>(MessageType::TaskRequest(11), client_auth_handle)
+//!         .await
+//!         .expect("failed to get a result");
+//!
+//!     match result {
+//!         TaskResult::Accepted => panic!("expected a value!"),
+//!         TaskResult::Finished(s) => {
+//!             assert_eq!(11, s);
+//!             tracing::info!("Response is: {s}");
+//!         }
+//!     }
+//!
+//!     Ok(())
+//! }
+//! ```
+//!
+
+#![warn(missing_docs, missing_debug_implementations)]
 
 pub mod actors;
-pub mod address;
-pub mod auth;
-mod crypto;
-pub mod identity;
-pub mod messaging;
-mod net;
-
-#[cfg(test)]
-mod tests {
-    use async_trait::async_trait;
-    use serde::{Deserialize, Serialize};
-    use thiserror::Error;
-    use tracing_subscriber::EnvFilter;
-
-    use crate::{
-        actors::{self, local::Actor},
-        address::Address,
-        auth::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore},
-        identity::SelfIdentity,
-        messaging::{MessageContext, MessageType, MessagingError, TaskResult},
-    };
-
-    struct Autho;
-
-    #[async_trait]
-    impl AuthActor for Autho {
-        async fn handle(
-            request: AccessRequest,
-            _id_store: &IdentityStore,
-            _address_store: &AddressStore,
-        ) -> AccessResolution {
-            let addr = request.address.to_string();
-            if addr == "127.0.0.1" || addr == "::1" {
-                AccessResolution::Accepted
-            } else {
-                AccessResolution::Denied
-            }
-        }
-    }
-
-    #[derive(Serialize, Deserialize, Debug, Error)]
-    enum SomeError {
-        #[error("empty input")]
-        Empty,
-    }
-
-    struct MyActor {
-        postfix: String,
-        address: Address,
-    }
-
-    impl MyActor {
-        fn new() -> Self {
-            Self {
-                postfix: "nya".into(),
-                address: Address::new_with_random_port("::1").expect("failed to create address"),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl Actor for MyActor {
-        type Input = String;
-        type Output = String;
-        type Error = SomeError;
-
-        async fn handle(
-            &mut self,
-            _addr: Option<Address>,
-            arg: Self::Input,
-        ) -> Result<Self::Output, Self::Error> {
-            if arg.is_empty() {
-                Err(SomeError::Empty)
-            } else {
-                Ok(format!("{}-{}", arg.to_uppercase(), &self.postfix))
-            }
-        }
-
-        fn get_self(&self) -> Address {
-            self.address.clone()
-        }
-    }
-
-    #[tokio::test]
-    async fn spawn_and_message() {
-        let filter = EnvFilter::from_default_env();
-        tracing_subscriber::fmt().with_env_filter(filter).init();
-
-        let actor_self_identity = SelfIdentity::new();
-        let actor_auth_handle = Autho::spawn(actor_self_identity.clone()).await;
-
-        let client_self_identity = SelfIdentity::new();
-        let client_auth_handle = Autho::spawn(client_self_identity.clone()).await;
-
-        actor_auth_handle
-            .store_identity(client_self_identity.public_identity().clone())
-            .await
-            .unwrap();
-
-        client_auth_handle
-            .store_identity(actor_self_identity.public_identity().clone())
-            .await
-            .unwrap();
-
-        let actor = MyActor::new();
-        let opts = actor.spawn_options(None);
-        let (actor_handle, _) =
-            actors::remote::spawn(Box::new(actor), opts, actor_auth_handle.clone())
-                .await
-                .unwrap();
-
-        let response = actor_handle
-            .send::<String, String, SomeError>(
-                MessageType::Task("something".to_string()),
-                MessageContext::Yielding,
-                &client_auth_handle,
-            )
-            .await;
-
-        match response {
-            Ok(res) => {
-                if let TaskResult::Finished(s) = res {
-                    tracing::info!("response: {s}");
-                    assert_eq!("SOMETHING-nya", s);
-                } else {
-                    panic!("expected a value in result, only got confirmation");
-                }
-            }
-            Err(err) => panic!("could not get response: {err}"),
-        }
-    }
-
-    #[tokio::test]
-    async fn actually_stops() {
-        let actor_self_identity = SelfIdentity::new();
-        let actor_auth_handle = Autho::spawn(actor_self_identity.clone()).await;
-
-        let client_self_identity = SelfIdentity::new();
-        let client_auth_handle = Autho::spawn(client_self_identity.clone()).await;
-
-        actor_auth_handle
-            .store_identity(client_self_identity.public_identity().clone())
-            .await
-            .unwrap();
-
-        client_auth_handle
-            .store_identity(actor_self_identity.public_identity().clone())
-            .await
-            .unwrap();
-
-        let actor = MyActor::new();
-        let opts = actor.spawn_options(None);
-        let (actor_handle, _) =
-            actors::remote::spawn(Box::new(actor), opts, actor_auth_handle.clone())
-                .await
-                .unwrap();
-
-        let stop_response = actor_handle
-            .send::<String, String, SomeError>(
-                MessageType::Stop,
-                MessageContext::Yielding,
-                &client_auth_handle,
-            )
-            .await;
-
-        assert!(matches!(
-            stop_response,
-            Result::<TaskResult<String>, MessagingError<SomeError>>::Ok(TaskResult::Accepted)
-        ));
-
-        let ping_response = actor_handle
-            .send::<String, String, SomeError>(
-                MessageType::Ping,
-                MessageContext::Yielding,
-                &client_auth_handle,
-            )
-            .await;
-
-        assert!(matches!(
-            ping_response,
-            Result::<TaskResult<String>, MessagingError<SomeError>>::Err(MessagingError::Transport)
-        ));
-    }
-}
+pub mod models;
+pub mod net;

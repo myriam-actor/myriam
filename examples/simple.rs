@@ -3,29 +3,29 @@
 //!
 
 use async_trait::async_trait;
+use libp2p::{identity::Keypair, multiaddr::Protocol};
 use myriam::{
-    actors::{self, local::Actor, remote::ActorHandle},
-    address::Address,
-    auth::{AccessRequest, AccessResolution, AddressStore, AuthActor, IdentityStore},
-    identity::{PublicIdentity, SelfIdentity},
-    messaging::{MessageContext, MessageType, TaskResult},
+    actors::{
+        auth::{AccessRequest, AccessResolution, AddrStore, AuthActor, PeerStore},
+        opts::SpawnOpts,
+        Actor, Context,
+    },
+    models::{MessageType, TaskResult},
 };
 use serde::{Deserialize, Serialize};
+use tracing_subscriber::EnvFilter;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
+#[error("failed to initialize counter")]
 struct CounterError;
 
 struct Counter {
     count: i32,
-    address: Address,
 }
 
 impl Counter {
     fn new(init: i32) -> Self {
-        Self {
-            count: init,
-            address: Address::new_with_random_port("::1").expect("failed to parse address"),
-        }
+        Self { count: init }
     }
 }
 
@@ -37,81 +37,91 @@ impl Actor for Counter {
 
     async fn handle(
         &mut self,
-        _addr: Option<Address>,
         arg: Self::Input,
+        _: Context<Self::Output, Self::Error>,
     ) -> Result<Self::Output, Self::Error> {
         self.count += arg;
+
         Ok(self.count)
     }
 
-    fn get_self(&self) -> Address {
-        self.address.clone()
+    async fn on_init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.count != 0 {
+            Err(Box::new(CounterError))
+        } else {
+            Ok(())
+        }
     }
+
+    async fn on_stop(&self) {}
 }
 
-struct Authenticator;
+struct Autho;
 
 #[async_trait]
-impl AuthActor for Authenticator {
-    async fn handle(
+impl AuthActor for Autho {
+    async fn resolve(
+        &mut self,
         request: AccessRequest,
-        id_store: &IdentityStore,
-        _address_store: &AddressStore,
+        _: &mut AddrStore,
+        _: &mut PeerStore,
     ) -> AccessResolution {
-        if id_store.contains_key(&request.identity.hash()) {
-            AccessResolution::Accepted
+        //
+        // only accept incoming requests from this machine
+        //
+        if let Some(address) = request.addr {
+            if address.iter().any(|p| match p {
+                Protocol::Ip4(a) => a.is_loopback(),
+                Protocol::Ip6(a) => a.is_loopback(),
+                _ => false,
+            }) {
+                AccessResolution::Accepted
+            } else {
+                AccessResolution::Denied
+            }
         } else {
             AccessResolution::Denied
         }
     }
 }
 
-async fn spawn(sender_id: PublicIdentity) -> ActorHandle {
-    let self_id = SelfIdentity::new();
-    let handle = Authenticator::spawn(self_id).await;
-    handle
-        .store_identity(sender_id)
-        .await
-        .expect("failed to insert sender public identity in store");
-
-    let actor = Counter::new(0);
-    let opts = actor.spawn_options(None);
-
-    actors::remote::spawn(Box::new(actor), opts, handle)
-        .await
-        .expect("failed to spawn actor")
-        .0
-}
-
 #[tokio::main]
-async fn main() {
-    // create the identity for this host
-    let client_id = SelfIdentity::new();
-    let client_public_id = client_id.public_identity().clone();
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let filter = EnvFilter::from_default_env();
+    tracing_subscriber::fmt().with_env_filter(filter).init();
+
+    // create the keypair for this host
+    let keypair = Keypair::generate_ed25519();
 
     // spawn an instance of our authenticator
-    let auth_handle = Authenticator::spawn(client_id).await;
+    let auth_handle = AuthActor::spawn(Box::new(Autho), keypair).await;
 
-    // pass our public id to the actor on some other machine and get a handle to the actor
-    let actor_handle = spawn(client_public_id.clone()).await;
+    // spawn an actor using our authorization actor
+    // share this handle however you want
+    let actor = Box::new(Counter::new(0));
+    let (actor_handle, _) = actor
+        .spawn(auth_handle.clone(), SpawnOpts::default())
+        .await?;
 
-    // store the public identity of the actor
-    auth_handle
-        .store_identity(actor_handle.identity.clone())
-        .await
-        .expect("failed to insert actor public identity in store");
+    //
+    // ... now, on another machine ...
+    //
+
+    let client_keypair = Keypair::generate_ed25519();
+    let client_auth_handle = AuthActor::spawn(Box::new(Autho), client_keypair).await;
 
     let result = actor_handle
-        .send::<i32, i32, CounterError>(
-            MessageType::Task(11),
-            MessageContext::Yielding,
-            &auth_handle,
-        )
+        .send_toplevel::<i32, i32, CounterError>(MessageType::TaskRequest(11), client_auth_handle)
         .await
         .expect("failed to get a result");
 
     match result {
         TaskResult::Accepted => panic!("expected a value!"),
-        TaskResult::Finished(s) => assert_eq!(11, s),
+        TaskResult::Finished(s) => {
+            assert_eq!(11, s);
+            tracing::info!("Response is: {s}");
+        }
     }
+
+    Ok(())
 }

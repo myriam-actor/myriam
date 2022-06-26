@@ -5,11 +5,13 @@
 //!
 
 use async_trait::async_trait;
+use libp2p::multiaddr::Protocol;
 use myriam::{
-    actors::{self, local::Actor},
-    address::Address,
-    auth::{AccessResolution, AuthActor},
-    identity::{PublicIdentity, SelfIdentity},
+    actors::{
+        auth::{AccessRequest, AccessResolution, AddrStore, AuthActor, PeerStore},
+        Actor, Context,
+    },
+    net::keys::read_keyfile,
 };
 use serde::{Deserialize, Serialize};
 
@@ -17,30 +19,36 @@ struct LocalAuth;
 
 #[async_trait]
 impl AuthActor for LocalAuth {
-    async fn handle(
-        request: myriam::auth::AccessRequest,
-        _id_store: &myriam::auth::IdentityStore,
-        _address_store: &myriam::auth::AddressStore,
-    ) -> myriam::auth::AccessResolution {
-        let addr = request.address.to_string();
-        if addr == "127.0.0.1" || addr == "::1" || addr == "::0" {
-            AccessResolution::Accepted
+    async fn resolve(
+        &mut self,
+        request: AccessRequest,
+        _: &mut AddrStore,
+        _: &mut PeerStore,
+    ) -> AccessResolution {
+        //
+        // only accept incoming requests from this machine
+        //
+        if let Some(address) = request.addr {
+            if address.iter().any(|p| match p {
+                Protocol::Ip4(a) => a.is_loopback(),
+                Protocol::Ip6(a) => a.is_loopback(),
+                _ => false,
+            }) {
+                AccessResolution::Accepted
+            } else {
+                AccessResolution::Denied
+            }
         } else {
             AccessResolution::Denied
         }
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
+#[error("something went wrong")]
 struct SomeError;
 
-struct EchoActor(Address);
-
-impl EchoActor {
-    fn new() -> Self {
-        Self(Address::new_with_random_port("::1").expect("failed to parse address for actor"))
-    }
-}
+struct EchoActor;
 
 #[async_trait]
 impl Actor for EchoActor {
@@ -52,42 +60,36 @@ impl Actor for EchoActor {
 
     async fn handle(
         &mut self,
-        _addr: Option<myriam::address::Address>,
-        arg: Self::Input,
+        msg: Self::Input,
+        _: Context<Self::Output, Self::Error>,
     ) -> Result<Self::Output, Self::Error> {
-        println!("actor got {arg}, sending response!");
-
-        Ok(arg.chars().rev().collect())
+        Ok(msg.chars().rev().collect())
     }
 
-    fn get_self(&self) -> myriam::address::Address {
-        self.0.clone()
+    async fn on_init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        Ok(())
     }
+
+    async fn on_stop(&self) {}
 }
 
 #[tokio::main]
 async fn main() {
-    let self_id = SelfIdentity::read_from_file("actor-secret.key".to_string())
+    let keypair = read_keyfile("actor-secret.key")
         .await
-        .expect("failed to read secret identity from keyfile");
+        .expect("failed to read actor's keyfile");
 
-    let auth = LocalAuth::spawn(self_id).await;
+    let auth = AuthActor::spawn(Box::new(LocalAuth), keypair).await;
 
-    let client_public_id = PublicIdentity::read_from_file("client-public.key".to_string())
-        .await
-        .expect("failed to read client public identity from file");
-
-    auth.store_identity(client_public_id)
-        .await
-        .expect("failed to insert public identity in store");
-
-    let actor = EchoActor::new();
-    let opts = actor.spawn_options(None);
-    let (_, task) = actors::remote::spawn(Box::new(actor), opts, auth)
+    let actor = Box::new(EchoActor);
+    let (handle, task) = actor
+        .spawn(auth, Default::default())
         .await
         .expect("failed to spawn actor");
 
-    println!("Actor started! Run a client on another terminal.");
+    println!("Address: {}", handle.addr);
+    println!("PeerId: {}", handle.peer);
+    println!("Actor started! Run a client on another terminal with our address and peer id.");
 
     let _ = task.await;
 }
