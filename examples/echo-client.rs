@@ -3,33 +3,49 @@
 //!
 //! Make sure to run the keygen example first so we can read the necessary keys.
 //!
+//! Usage: cargo run --example echo-client -- <address> <Peer ID> <message>
+//!
 
 use async_trait::async_trait;
+use libp2p::multiaddr::Protocol;
 use myriam::{
-    actors::remote::ActorHandle,
-    address::Address,
-    auth::{AccessResolution, AuthActor},
-    identity::{PublicIdentity, SelfIdentity},
-    messaging::{MessageContext, MessageType, TaskResult},
+    actors::{
+        auth::{AccessRequest, AccessResolution, AddrStore, AuthActor, PeerStore},
+        ActorHandle,
+    },
+    models::{MessageType, TaskResult},
+    net::keys::read_keyfile,
 };
 use serde::{Deserialize, Serialize};
 
 struct LocalAuth;
 
 // ideally, this would be part of a shared lib instead of copy-pasted here
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
+#[error("Something went wrong")]
 struct SomeError;
 
 #[async_trait]
 impl AuthActor for LocalAuth {
-    async fn handle(
-        request: myriam::auth::AccessRequest,
-        _id_store: &myriam::auth::IdentityStore,
-        _address_store: &myriam::auth::AddressStore,
-    ) -> myriam::auth::AccessResolution {
-        let addr = request.address.to_string();
-        if addr == "127.0.0.1" || addr == "::1" || addr == "::0" {
-            AccessResolution::Accepted
+    async fn resolve(
+        &mut self,
+        request: AccessRequest,
+        _: &mut AddrStore,
+        _: &mut PeerStore,
+    ) -> AccessResolution {
+        //
+        // only accept incoming requests from this machine
+        //
+        if let Some(address) = request.addr {
+            if address.iter().any(|p| match p {
+                Protocol::Ip4(a) => a.is_loopback(),
+                Protocol::Ip6(a) => a.is_loopback(),
+                _ => false,
+            }) {
+                AccessResolution::Accepted
+            } else {
+                AccessResolution::Denied
+            }
         } else {
             AccessResolution::Denied
         }
@@ -38,34 +54,27 @@ impl AuthActor for LocalAuth {
 
 #[tokio::main]
 async fn main() {
-    let args = std::env::args();
-    let message = args.skip(1).fold(String::new(), |res, s| res + " " + &s);
+    let mut args = std::env::args();
 
-    let self_id = SelfIdentity::read_from_file("client-secret.key".to_string())
+    let addr = args.nth(1).expect("missing address");
+    let peer_id = args.next().expect("missing peer id");
+    let message = args.collect();
+
+    println!("dialing addr: {addr}");
+    println!("dialing peer_id: {peer_id}");
+
+    let keypair = read_keyfile("client-secret.key")
         .await
-        .expect("failed to read secret identity from keyfile");
-
-    let auth = LocalAuth::spawn(self_id).await;
-
-    let actor_public_id = PublicIdentity::read_from_file("actor-public.key".to_string())
-        .await
-        .expect("failed to read client public identity from file");
-
-    auth.store_identity(actor_public_id.clone())
-        .await
-        .expect("failed to insert public identity in store");
+        .expect("failed to read keyfile");
+    let auth = AuthActor::spawn(Box::new(LocalAuth), keypair).await;
 
     let handle = ActorHandle {
-        address: Address::new("::1", 3050),
-        identity: actor_public_id,
+        addr: addr.parse().expect("failed to parse given address"),
+        peer: peer_id.parse().expect("failed to parse peer id"),
     };
 
     let result = handle
-        .send::<String, String, SomeError>(
-            MessageType::Task(message),
-            MessageContext::Yielding,
-            &auth,
-        )
+        .send_toplevel::<String, String, SomeError>(MessageType::TaskRequest(message), auth)
         .await
         .expect("failed to receive response from actor");
 
