@@ -1,11 +1,11 @@
 [package]
 name = "myriam"
-version = "0.0.6"
+version = "0.0.6-a"
 edition = "2021"
 license = "Apache-2.0"
 description = "Remote actors on top of libp2p."
-homepage = "https://gitlab.com/ariSun/myriam-rs"
-repository = "https://gitlab.com/ariSun/myriam-rs"
+homepage = "https://codeberg.org/arisunz/myriam-rs"
+repository = "https://codeberg.org/arisunz/myriam-rs"
 categories = ["concurrency", "network-programming", "asynchronous"]
 keywords = ["actor", "actors", "distributed", "libp2p"]
 authors = ["Ariela Wenner <arisunz at disroot dot org>"]
