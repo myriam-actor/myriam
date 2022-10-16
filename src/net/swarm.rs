@@ -7,7 +7,7 @@ use libp2p::{
     identity::Keypair,
     kad::{store::MemoryStore, Kademlia},
     request_response::{ProtocolSupport, RequestResponse, RequestResponseConfig},
-    swarm::SwarmEvent,
+    swarm::{SwarmBuilder, SwarmEvent},
     Multiaddr, PeerId, Swarm,
 };
 
@@ -28,10 +28,10 @@ pub(crate) async fn new_actor_swarm(
     let peer_id = PeerId::from_public_key(&keypair.public());
 
     //
-    // willfully ignoring the warning about using libp2p::development_transport
+    // willfully ignoring the warning about using libp2p::tokio_development_transport
     // as it is exactly what we need
     //
-    let transport = libp2p::development_transport(keypair).await?;
+    let transport = libp2p::tokio_development_transport(keypair)?;
     let kad = Kademlia::new(peer_id, MemoryStore::new(peer_id));
     let req_rep = RequestResponse::new(
         MessagingCodec,
@@ -41,7 +41,11 @@ pub(crate) async fn new_actor_swarm(
 
     let behavior = ActorBehaviour { req_rep, kad };
 
-    let mut swarm = Swarm::new(transport, behavior, peer_id);
+    let mut swarm = SwarmBuilder::new(transport, behavior, peer_id)
+        .executor(Box::new(|fut| {
+            tokio::spawn(fut);
+        }))
+        .build();
 
     match proto {
         Ip::V4 => {
@@ -81,10 +85,10 @@ pub(crate) async fn new_messaging_swarm(
     let peer_id = PeerId::from_public_key(&keypair.public());
 
     //
-    // willfully ignoring the warning about using libp2p::development_transport
+    // willfully ignoring the warning about using libp2p::tokio_development_transport
     // as it is exactly what we need
     //
-    let transport = libp2p::development_transport(keypair).await?;
+    let transport = libp2p::tokio_development_transport(keypair)?;
     let kad = Kademlia::new(peer_id, MemoryStore::new(peer_id));
     let req_rep = RequestResponse::new(
         MessagingCodec,
@@ -93,6 +97,11 @@ pub(crate) async fn new_messaging_swarm(
     );
 
     let behavior = ActorBehaviour { req_rep, kad };
+    let swarm = SwarmBuilder::new(transport, behavior, peer_id)
+        .executor(Box::new(|fut| {
+            tokio::spawn(fut);
+        }))
+        .build();
 
-    Ok(Swarm::new(transport, behavior, peer_id))
+    Ok(swarm)
 }
