@@ -41,11 +41,15 @@ pub(crate) async fn new_actor_swarm(
 
     let behavior = ActorBehaviour { req_rep, kad };
 
-    let mut swarm = SwarmBuilder::new(transport, behavior, peer_id)
-        .executor(Box::new(|fut| {
+    let mut swarm = SwarmBuilder::with_executor(
+        transport,
+        behavior,
+        peer_id,
+        Box::new(|fut| {
             tokio::spawn(fut);
-        }))
-        .build();
+        }),
+    )
+    .build();
 
     match proto {
         Ip::V4 => {
@@ -97,11 +101,15 @@ pub(crate) async fn new_messaging_swarm(
     );
 
     let behavior = ActorBehaviour { req_rep, kad };
-    let swarm = SwarmBuilder::new(transport, behavior, peer_id)
-        .executor(Box::new(|fut| {
+    let swarm = SwarmBuilder::with_executor(
+        transport,
+        behavior,
+        peer_id,
+        Box::new(|fut| {
             tokio::spawn(fut);
-        }))
-        .build();
+        }),
+    )
+    .build();
 
     Ok(swarm)
 }

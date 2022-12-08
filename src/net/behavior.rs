@@ -5,7 +5,7 @@
 use libp2p::{
     kad::{store::MemoryStore, Kademlia, KademliaEvent},
     request_response::{RequestResponse, RequestResponseEvent},
-    NetworkBehaviour,
+    swarm::NetworkBehaviour,
 };
 
 use super::codec::MessagingCodec;
