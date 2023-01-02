@@ -151,7 +151,7 @@ async fn spawn_and_message() -> Result<(), Box<dyn std::error::Error>> {
     let filter = EnvFilter::from_default_env();
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
-    let counter = Box::new(Counter::default());
+    let counter = Box::<Counter>::default();
     let their_keypair = Keypair::generate_ed25519();
     let their_auth = Box::new(Autho).spawn(their_keypair).await;
     let (handle, task) = counter
@@ -190,7 +190,7 @@ async fn spawn_and_message() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn actor_to_actor() -> Result<(), Box<dyn std::error::Error>> {
-    let counter = Box::new(Counter::default());
+    let counter = Box::<Counter>::default();
     let counter_keypair = Keypair::generate_ed25519();
     let counter_auth = Box::new(Autho).spawn(counter_keypair).await;
     let (counter_handle, _) = counter
@@ -243,7 +243,7 @@ async fn actor_to_actor() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn messaging_from_banning_fails() {
-    let counter = Box::new(Counter::default());
+    let counter = Box::<Counter>::default();
     let counter_keypair = Keypair::generate_ed25519();
     let counter_auth = Box::new(BanningAuth).spawn(counter_keypair).await;
     let (counter_handle, _) = counter
