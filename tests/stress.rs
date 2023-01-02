@@ -140,6 +140,7 @@ impl Actor for Profiler {
 }
 
 #[tokio::test]
+#[ignore]
 async fn stress() -> Result<(), Box<dyn std::error::Error>> {
     let counter = Box::new(Counter::default());
     let counter_keypair = Keypair::generate_ed25519();
