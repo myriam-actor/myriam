@@ -13,6 +13,7 @@ use super::{
 use async_trait::async_trait;
 use libp2p::identity::Keypair;
 use serde::{Deserialize, Serialize};
+use tokio::sync::oneshot;
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Default)]
@@ -111,7 +112,7 @@ impl Actor for Counter {
         }
     }
 
-    async fn on_stop(&self) {}
+    async fn on_stop(&mut self) {}
 }
 
 #[async_trait]
@@ -143,7 +144,40 @@ impl Actor for Proxy {
         Ok(())
     }
 
-    async fn on_stop(&self) {}
+    async fn on_stop(&mut self) {}
+}
+
+struct Complainer(Option<oneshot::Sender<()>>);
+
+#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
+#[error("blah")]
+struct ComplainerError;
+
+#[async_trait]
+impl Actor for Complainer {
+    type Input = ();
+    type Output = ();
+    type Error = ComplainerError;
+
+    async fn handle(
+        &mut self,
+        _: Self::Input,
+        _: Context<Self::Output, Self::Error>,
+    ) -> Result<Self::Output, Self::Error> {
+        Ok(())
+    }
+
+    async fn on_init(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        if self.0.is_some() {
+            Ok(())
+        } else {
+            Err(Box::new(ComplainerError))
+        }
+    }
+
+    async fn on_stop(&mut self) {
+        let _ = self.0.take().expect("channel should be present").send(());
+    }
 }
 
 #[tokio::test]
@@ -270,4 +304,43 @@ async fn messaging_from_banning_fails() {
         )
         .await
         .expect_err("message was supposed to fail");
+}
+
+#[tokio::test]
+async fn on_stop_works() -> Result<(), Box<dyn std::error::Error>> {
+    let (on_stop_tx, mut on_stop_rx) = oneshot::channel();
+    
+    let complainer = Box::new(Complainer(Some(on_stop_tx)));
+    let their_keypair = Keypair::generate_ed25519();
+    let their_auth = Box::new(Autho).spawn(their_keypair).await;
+    let (handle, task) = complainer
+        .spawn(
+            their_auth,
+            SpawnOpts {
+                protocol: Some(Ip::V4),
+            },
+        )
+        .await
+        .unwrap();
+
+    let our_keypair = Keypair::generate_ed25519();
+    let our_auth = Box::new(Autho).spawn(our_keypair).await;
+    handle
+        .send_toplevel::<(), (), ComplainerError>(
+            MessageType::TaskRequest(()),
+            our_auth.clone(),
+        )
+        .await
+        .expect("failed to send message!");
+
+    let _ = handle
+        .send_toplevel::<CounterMessage, usize, CounterError>(MessageType::Stop, our_auth)
+        .await
+        .expect("failed to stop actor!");
+
+    on_stop_rx.try_recv().expect("expected message on stop channel");
+
+    let _ = task.await;
+
+    Ok(())
 }

@@ -70,7 +70,7 @@ impl Actor for EchoActor {
         Ok(())
     }
 
-    async fn on_stop(&self) {}
+    async fn on_stop(&mut self) {}
 }
 
 #[tokio::main]

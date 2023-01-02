@@ -213,6 +213,9 @@ pub trait Actor: Send + 'static {
                         .await;
                 }
             }
+
+            let on_stop = self.on_stop();
+            on_stop.await;
         });
 
         Ok((self_handle.clone(), task))
@@ -271,7 +274,7 @@ pub trait Actor: Send + 'static {
     ///
     /// Method to execute on actor termination
     ///
-    async fn on_stop(&self);
+    async fn on_stop(&mut self);
 }
 
 ///

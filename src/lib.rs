@@ -68,7 +68,7 @@
 //!         }
 //!     }
 //!
-//!     async fn on_stop(&self) {}
+//!     async fn on_stop(&mut self) {}
 //! }
 //!
 //! struct Autho;

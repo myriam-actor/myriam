@@ -104,7 +104,7 @@ impl Actor for Counter {
         }
     }
 
-    async fn on_stop(&self) {}
+    async fn on_stop(&mut self) {}
 }
 
 #[async_trait]
@@ -136,7 +136,7 @@ impl Actor for Profiler {
         Ok(())
     }
 
-    async fn on_stop(&self) {}
+    async fn on_stop(&mut self) {}
 }
 
 #[tokio::test]
