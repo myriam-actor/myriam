@@ -21,16 +21,7 @@ outlier case, but offered by `myriam` as a convenience.
 
 ```rust
 use async_trait::async_trait;
-use libp2p::{identity::Keypair, multiaddr::Protocol};
-use myriam::{
-    actors::{
-        auth::{AccessRequest, AccessResolution, AddrStore, AuthActor, PeerStore},
-        opts::SpawnOpts,
-        Actor,
-        Context
-    },
-    models::{MessageType, TaskResult},
-};
+use myriam::prelude::*;
 use serde::{Deserialize, Serialize};
 use tracing_subscriber::EnvFilter;
 
@@ -69,7 +60,8 @@ impl Actor for Counter {
             Ok(())
         }
     }
-    async fn on_stop(&self) {}
+
+    async fn on_stop(&mut self) {}
 }
 
 struct Autho;

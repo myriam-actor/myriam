@@ -2,8 +2,7 @@
 //! Generate a keypair for using with client-server examples
 //!
 
-use libp2p::identity::Keypair;
-use myriam::net::keys::dump_keypair;
+use myriam::prelude::*;
 
 const ACTOR_KEYFILE_NAME: &str = "actor-secret.key";
 const CLIENT_KEYFILE_NAME: &str = "client-secret.key";

@@ -15,15 +15,7 @@
 //!
 
 use async_trait::async_trait;
-use libp2p::identity::Keypair;
-use myriam::{
-    actors::{
-        auth::{AccessRequest, AccessResolution, AddrStore, AuthActor, PeerStore},
-        opts::{Ip, SpawnOpts},
-        Actor, ActorHandle, Context,
-    },
-    models::{MessageType, TaskResult},
-};
+use myriam::prelude::*;
 use serde::{Deserialize, Serialize};
 
 const NUM_TASKS: usize = 1000;
