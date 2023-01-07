@@ -49,9 +49,6 @@ pub trait Actor: Send + 'static {
     /// Error in the messaging flow
     type Error: Error + Clone + Send + Serialize + DeserializeOwned + 'static;
 
-    /*
-     * Default implementations
-     */
     ///
     /// Consume a boxed actor, spawning an instance of it
     ///
@@ -252,9 +249,6 @@ pub trait Actor: Send + 'static {
         bincode::deserialize(&blob_response).map_err(|_| MessagingError::Serialize)?
     }
 
-    /*
-     * Missing implementations
-     */
     ///
     /// Handle an incoming message
     ///
