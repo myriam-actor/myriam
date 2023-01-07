@@ -1,5 +1,7 @@
 # myriam-rs
 
+!["pipeline status"](https://ci.arielaw.ar/api/badges/arisunz/myriam-rs/status.svg)
+
 Remote actors on top of [libp2p](https://libp2p.io/).
 
 Displaimer: This API is a. EXTREMELY unstable at the moment and b. not guaranteed to be secure. Please don't even think of letting this get close to a production system, or anything you even remotely care about for that matter.
