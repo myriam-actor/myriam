@@ -45,7 +45,7 @@ impl Actor for Counter {
     type Input = i32;
     type Output = i32;
     type Error = CounterError;
-    
+
     async fn handle(
         &mut self,
         arg: Self::Input,
@@ -99,20 +99,20 @@ impl AuthActor for Autho {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let filter = EnvFilter::from_default_env();
     tracing_subscriber::fmt().with_env_filter(filter).init();
-
+        
     // create the keypair for this host
     let keypair = Keypair::generate_ed25519();
-    
+
     // spawn an instance of our authenticator
     let auth_handle = AuthActor::spawn(Box::new(Autho), keypair).await;
-    
+
     // spawn an actor using our authorization actor
     // share this handle however you want
     let actor = Box::new(Counter::new(0));
     let (actor_handle, _) = actor
         .spawn(auth_handle.clone(), SpawnOpts::default())
         .await?;
-    
+
     //
     // ... now, on another machine ...
     //
@@ -122,7 +122,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .send_toplevel::<i32, i32, CounterError>(MessageType::TaskRequest(11), client_auth_handle)
         .await
         .expect("failed to get a result");
-    
+
     match result {
         TaskResult::Accepted => panic!("expected a value!"),
         TaskResult::Finished(s) => {
