@@ -2,6 +2,8 @@
 
 !["pipeline status"](https://ci.arielaw.ar/api/badges/arisunz/myriam-rs/status.svg)
 
+NOTE: this was a neat proof-of-concept, but my priorities have changed and what I'd currently like to get out of an actor model implementation (particularly, being able to compile to webassembly and overall a more ergonomic API) is not possible with myriam's current architecture. I've been thinking about a complete rewrite as a different project, or a rearchitecture if possible (doubtful).
+
 Remote actors on top of [libp2p](https://libp2p.io/).
 
 Displaimer: This API is a. EXTREMELY unstable at the moment and b. not guaranteed to be secure. Please don't even think of letting this get close to a production system, or anything you even remotely care about for that matter.
