@@ -14,7 +14,7 @@ This is a WIP rewrite from scratch. I'm aiming for an API heavily inspired in [G
     
     // routers handle external access to several attached actors
     // we can think of this exposed actor as a capability
-    // "tor:someaddress.onion:0139aa9b4d523e1da515ce21a818e579acd005fbd0aea62ef094ac1b845f99e7"
+    // "tor:0139aa9b4d523e1da515ce21a818e579acd005fbd0aea62ef094ac1b845f99e7@someaddress.onion"
     let address = router_handle.attach(untyped_handle);
 
     let remote_handle = RemoteHandle<u32, u32, SomeError>::new(address)?;
@@ -33,7 +33,7 @@ This is a WIP rewrite from scratch. I'm aiming for an API heavily inspired in [G
 
 # License
 
-Copyright 2023 Ariela Wenner
+Copyright 2024 Ariela Wenner
 
    Licensed under the Apache License, Version 2.0 (the "License");
    you may not use this file except in compliance with the License.
