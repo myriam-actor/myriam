@@ -1,9 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-pub type RawMessage = Vec<u8>;
-
-pub type RawReply = Vec<u8>;
-
 #[derive(Debug, Serialize, Deserialize)]
 pub enum Message<Input> {
     Task(Input),
@@ -19,7 +15,7 @@ pub enum Reply<Output> {
 
 pub type MsgResult<Output, Error> = Result<Reply<Output>, MsgError<Error>>;
 
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Serialize, Deserialize, thiserror::Error)]
 pub enum MsgError<Error: std::error::Error> {
     #[error("failed to send message through channel")]
     Send,
