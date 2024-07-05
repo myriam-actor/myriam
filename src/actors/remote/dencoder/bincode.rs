@@ -20,7 +20,7 @@ mod tests {
     use serde::{Deserialize, Serialize};
 
     use super::BincodeDencoder;
-    use crate::dencoder::Dencoder;
+    use crate::actors::remote::dencoder::Dencoder;
 
     const TEST_STRING: &str = "a ü string ⅞123";
 

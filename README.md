@@ -10,7 +10,10 @@ This is a WIP rewrite from scratch. I'm aiming for an API heavily inspired in [G
     let (local_handle, untyped_handle) = Box::new(MyActor::default()).spawn();
     
     // create router with a TOR netlayer
-    let router_handle = Router::with_netlayer(OnionNetLayer::default());
+    let mut router_handle = Router::with_netlayer(OnionNetLayer::default());
+
+    // register additional netlayers if needed
+    router_handle.register_netlayer(CustomNetLayer::new());
     
     // routers handle external access to several attached actors
     // we can think of this exposed actor as a capability

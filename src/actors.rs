@@ -1,6 +1,7 @@
 use std::future::Future;
 
 pub mod local;
+pub mod remote;
 
 pub trait Actor<I, O, E> {
     fn handler(&mut self, input: I) -> impl Future<Output = Result<O, E>> + Send;
