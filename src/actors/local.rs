@@ -46,7 +46,7 @@ where
     Ok(LocalHandle { sender })
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocalHandle<I, O, E: std::error::Error> {
     sender: mpsc::Sender<(Message<I>, oneshot::Sender<MsgResult<O, E>>)>,
 }

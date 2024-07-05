@@ -9,13 +9,15 @@ pub trait Actor<I, O, E> {
 
 #[cfg(test)]
 mod tests {
+    use serde::{Deserialize, Serialize};
+
     use super::Actor;
 
     pub(crate) struct Mult {
         pub a: u32,
     }
 
-    #[derive(Debug, thiserror::Error)]
+    #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
     #[error("uh oh")]
     pub(crate) struct SomeError;
 

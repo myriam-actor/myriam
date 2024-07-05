@@ -5,5 +5,4 @@
 //!
 
 pub mod actors;
-pub mod address;
 pub mod messaging;
