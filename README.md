@@ -12,9 +12,6 @@ This is a WIP rewrite from scratch. I'm aiming for an API heavily inspired in [G
     // create router with a TOR netlayer
     let mut router_handle = Router::with_netlayer(OnionNetLayer::default());
 
-    // register additional netlayers if needed
-    router_handle.register_netlayer(CustomNetLayer::new());
-    
     // routers handle external access to several attached actors
     // we can think of this exposed actor as a capability
     // "tor:0139aa9b4d523e1da515ce21a818e579acd005fbd0aea62ef094ac1b845f99e7@someaddress.onion"

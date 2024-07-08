@@ -9,8 +9,10 @@ use super::{
     Actor,
 };
 
+pub mod address;
 pub mod dencoder;
 pub mod netlayer;
+pub mod router;
 
 pub async fn spawn_untyped<I, O, E, D>(
     actor: impl Actor<I, O, E> + Send + 'static,
@@ -64,12 +66,15 @@ impl UntypedHandle {
         let (sender, receiver) = oneshot::channel();
 
         self.sender.send((msg, sender)).await.map_err(|e| {
-            tracing::error!("send: {e}");
+            tracing::error!("untyped send: {e}");
 
             Error::Send
         })?;
 
-        receiver.await.map_err(|_| Error::Recv)?
+        receiver.await.map_err(|e| {
+            tracing::error!("untyped recv: {e}");
+            Error::Recv
+        })?
     }
 }
 

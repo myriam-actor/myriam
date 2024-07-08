@@ -3,7 +3,7 @@ name = "myriam"
 version = "0.0.11"
 edition = "2021"
 license = "Apache-2.0"
-description = "Remote actors on top of libp2p."
+description = "Actor model implementation for local and remote actors."
 homepage = "https://codeberg.org/arisunz/myriam-rs"
 repository = "https://codeberg.org/arisunz/myriam-rs"
 categories = ["concurrency", "network-programming", "asynchronous"]
@@ -18,7 +18,12 @@ async_std = []
 
 [dependencies]
 bincode = "1.3.3"
+hex = "0.4.3"
+rand = "0.8.5"
 serde = { version = "1.0.203", features = ["derive"] }
 thiserror = "1.0.61"
 tokio = { version = "1.38.0", features = ["full"], optional = true }
 tracing = "0.1.40"
+
+[dev-dependencies]
+tracing-subscriber = "0.3.18"

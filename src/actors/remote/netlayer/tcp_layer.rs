@@ -1,9 +1,6 @@
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
-};
+use tokio::net::{TcpListener, TcpStream};
 
-use super::NetLayer;
+use super::{AsyncReadWriteExt, NetLayer};
 
 #[derive(Debug)]
 pub struct TcpNetLayer {
@@ -11,7 +8,7 @@ pub struct TcpNetLayer {
 }
 
 impl TcpNetLayer {
-    pub async fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             listener: Option::None,
         }
@@ -25,6 +22,14 @@ impl NetLayer for TcpNetLayer {
         "tcp"
     }
 
+    async fn connect(addr: &str) -> Result<impl AsyncReadWriteExt, Self::Error> {
+        Ok(TcpStream::connect(addr).await.map_err(|e| {
+            tracing::error!("connect error {e}");
+
+            TcpError::Connect
+        })?)
+    }
+
     async fn init(&mut self) -> Result<(), Self::Error> {
         self.listener
             .replace(TcpListener::bind("0.0.0.0:0").await.map_err(|e| {
@@ -36,7 +41,7 @@ impl NetLayer for TcpNetLayer {
         Ok(())
     }
 
-    async fn accept(&self) -> Result<impl AsyncReadExt, Self::Error> {
+    async fn accept(&self) -> Result<impl AsyncReadWriteExt, Self::Error> {
         Ok(self
             .listener
             .as_ref()
@@ -49,14 +54,6 @@ impl NetLayer for TcpNetLayer {
                 TcpError::Accept
             })?
             .0)
-    }
-
-    async fn connect(&self, addr: &str) -> Result<impl AsyncWriteExt, Self::Error> {
-        Ok(TcpStream::connect(addr).await.map_err(|e| {
-            tracing::error!("connect error {e}");
-
-            TcpError::Connect
-        })?)
     }
 
     fn address(&self) -> Result<String, Self::Error> {
