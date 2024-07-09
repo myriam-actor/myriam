@@ -37,15 +37,29 @@ where
                     let stop_msg = matches!(msg, Message::<I>::Stop);
 
                     let res = inner_handle.send(msg).await;
-                    let _ = sender.send(D::encode(res).map_err(|_| Error::Encode));
+                    match D::encode(res).map_err(|_| Error::Encode) {
+                        Ok(enc) => {
+                            if let Err(_) = sender.send(Ok(enc)) {
+                                tracing::warn!("untyped: failed to send reply");
+                            }
 
-                    if stop_msg {
-                        break;
+                            if stop_msg {
+                                break;
+                            }
+                        }
+                        Err(err) => {
+                            tracing::error!("untyped: failed to encode reply");
+                            let _ = sender.send(Err(err)).inspect_err(|_| {
+                                tracing::warn!("untyped: failed to send reply");
+                            });
+                        }
                     }
                 }
                 Err(err) => {
-                    tracing::error!("failed to decode incoming message: {err}");
-                    let _ = sender.send(Err(Error::Decode));
+                    tracing::error!("untyped: failed to decode incoming message: {err}");
+                    let _ = sender.send(Err(Error::Decode)).inspect_err(|_| {
+                        tracing::warn!("untyped: failed to send reply");
+                    });
                 }
             }
         }

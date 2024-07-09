@@ -81,7 +81,7 @@ impl Router {
                             },
                         };
 
-                        let _ = try_handle_message(stream, handle).await;
+                        let _ = try_handle_message(stream, handle). await;
                     }
                 }
             }
@@ -123,7 +123,11 @@ where
         Error::Recv
     })?;
 
-    let msg_buffer = vec![0; msg_size as usize];
+    let mut msg_buffer = vec![0; msg_size as usize];
+    stream.read_exact(&mut msg_buffer).await.map_err(|e| {
+        tracing::error!("router: recv - could not read msg - {e}");
+        Error::Recv
+    })?;
 
     let res = handle.send(msg_buffer).await.map_err(|err| {
         tracing::error!("router: msg error - {err}");
@@ -272,7 +276,7 @@ where
             Error::Send
         })?;
 
-        let bytes = D::encode(Message::Task(msg))?;
+        let bytes = D::encode(msg)?;
         stream.write_u32(bytes.len() as u32).await.map_err(|err| {
             tracing::error!("remote handle: failed to send message size - {err}");
             Error::Send
@@ -349,9 +353,7 @@ mod tests {
 
     #[tokio::test]
     async fn spawn_and_message() {
-        tracing_subscriber::fmt::init();
-
-        let (local, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+        let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
             .await
             .unwrap();
 
@@ -364,5 +366,41 @@ mod tests {
 
         let res = remote.send(Message::Task(5)).await.unwrap();
         assert!(matches!(res, Ok(Reply::Task(15))));
+    }
+
+    #[tokio::test]
+    async fn ping() {
+        let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+            .await
+            .unwrap();
+
+        let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
+        let addr = ActorAddress::new::<TcpNetLayer>(router.host_address()).unwrap();
+
+        router.attach(&addr, handle).await.unwrap();
+
+        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
+
+        let res = remote.send(Message::Ping).await.unwrap();
+        assert!(matches!(res, Ok(Reply::Accepted)));
+    }
+
+    #[tokio::test]
+    async fn stop() {
+        let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+            .await
+            .unwrap();
+
+        let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
+        let addr = ActorAddress::new::<TcpNetLayer>(router.host_address()).unwrap();
+
+        router.attach(&addr, handle).await.unwrap();
+
+        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
+
+        let res = remote.send(Message::Stop).await.unwrap();
+        assert!(matches!(res, Ok(Reply::Accepted)));
+
+        remote.send(Message::Ping).await.unwrap_err();
     }
 }

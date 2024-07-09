@@ -27,13 +27,13 @@ where
                         Err(err) => Err(MsgError::Task(err)),
                     };
 
-                    let _ = sender.send(result);
+                    try_send_reply(sender, result);
                 }
                 Message::Ping => {
-                    let _ = sender.send(Ok(Reply::Accepted));
+                    try_send_reply(sender, Ok(Reply::Accepted));
                 }
                 Message::Stop => {
-                    let _ = sender.send(Ok(Reply::Accepted));
+                    try_send_reply(sender, Ok(Reply::Accepted));
                     break;
                 }
             }
@@ -44,6 +44,15 @@ where
     conf_receiver.await.map_err(|_| Error::Spawn)??;
 
     Ok(LocalHandle { sender })
+}
+
+fn try_send_reply<O, E>(sender: oneshot::Sender<MsgResult<O, E>>, reply: MsgResult<O, E>)
+where
+    E: std::error::Error,
+{
+    if let Err(_) = sender.send(reply) {
+        tracing::error!("local: failed to send reply");
+    }
 }
 
 #[derive(Debug, Clone)]
