@@ -403,4 +403,25 @@ mod tests {
 
         remote.send(Message::Ping).await.unwrap_err();
     }
+
+    #[tokio::test]
+    async fn revoke() {
+        let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+            .await
+            .unwrap();
+
+        let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
+        let addr = ActorAddress::new::<TcpNetLayer>(router.host_address()).unwrap();
+
+        router.attach(&addr, handle).await.unwrap();
+
+        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
+
+        let res = remote.send(Message::Ping).await.unwrap();
+        assert!(matches!(res, Ok(Reply::Accepted)));
+
+        router.revoke(&addr).await.unwrap();
+
+        remote.send(Message::Ping).await.unwrap_err();
+    }
 }
