@@ -38,6 +38,8 @@ impl Router {
             Error::Init
         })?;
 
+        let host_address_inner = host_address.clone();
+
         let mut peers: HashMap<String, UntypedHandle> = HashMap::new();
 
         let (sender, mut receiver) =
@@ -55,7 +57,13 @@ impl Router {
                                 let _ = sender.send(Ok(RouterReply::Accepted));
                                 return;
                             },
-                            RouterMessage::Attach(addr, handle) => {
+                            RouterMessage::Attach(handle) => {
+                                let addr = if let Ok(addr) = ActorAddress::new::<N>(&host_address_inner) {
+                                    addr
+                                } else {
+                                    continue;
+                                };
+
                                 peers.insert(addr.peer_id().to_owned(), handle);
 
                                 let _ = sender.send(Ok(RouterReply::Address(addr)));
@@ -159,14 +167,10 @@ pub struct RouterHandle {
 }
 
 impl RouterHandle {
-    pub async fn attach(
-        &self,
-        address: &ActorAddress,
-        handle: UntypedHandle,
-    ) -> Result<ActorAddress, Error> {
+    pub async fn attach(&self, handle: UntypedHandle) -> Result<ActorAddress, Error> {
         let (sender, receiver) = oneshot::channel();
         self.sender
-            .send((RouterMessage::Attach(address.clone(), handle), sender))
+            .send((RouterMessage::Attach(handle), sender))
             .await
             .map_err(|e| {
                 tracing::error!("router: {e}");
@@ -310,7 +314,7 @@ where
 #[derive(Debug)]
 enum RouterMessage {
     Stop,
-    Attach(ActorAddress, UntypedHandle),
+    Attach(UntypedHandle),
     Revoke(ActorAddress),
 }
 
@@ -346,7 +350,6 @@ mod tests {
         actors::{
             remote::{
                 self,
-                address::ActorAddress,
                 dencoder::bincode::BincodeDencoder,
                 netlayer::tcp_layer::TcpNetLayer,
                 router::{RemoteHandle, Router},
@@ -363,9 +366,8 @@ mod tests {
             .unwrap();
 
         let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
-        let addr = ActorAddress::new::<TcpNetLayer>(router.host_address()).unwrap();
 
-        router.attach(&addr, handle).await.unwrap();
+        let addr = router.attach(handle).await.unwrap();
 
         let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
 
@@ -380,9 +382,8 @@ mod tests {
             .unwrap();
 
         let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
-        let addr = ActorAddress::new::<TcpNetLayer>(router.host_address()).unwrap();
 
-        router.attach(&addr, handle).await.unwrap();
+        let addr = router.attach(handle).await.unwrap();
 
         let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
 
@@ -397,9 +398,8 @@ mod tests {
             .unwrap();
 
         let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
-        let addr = ActorAddress::new::<TcpNetLayer>(router.host_address()).unwrap();
 
-        router.attach(&addr, handle).await.unwrap();
+        let addr = router.attach(handle).await.unwrap();
 
         let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
 
@@ -416,9 +416,8 @@ mod tests {
             .unwrap();
 
         let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
-        let addr = ActorAddress::new::<TcpNetLayer>(router.host_address()).unwrap();
 
-        router.attach(&addr, handle).await.unwrap();
+        let addr = router.attach(handle).await.unwrap();
 
         let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
 
