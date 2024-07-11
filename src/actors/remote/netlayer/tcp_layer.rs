@@ -22,7 +22,7 @@ impl NetLayer for TcpNetLayer {
         "tcp"
     }
 
-    async fn connect(addr: &str) -> Result<impl AsyncMsgStream, Self::Error> {
+    async fn connect(&self, addr: &str) -> Result<impl AsyncMsgStream, Self::Error> {
         Ok(TcpStream::connect(addr).await.map_err(|e| {
             tracing::error!("connect error {e}");
 
@@ -80,4 +80,56 @@ pub enum TcpError {
 
     #[error("failed to connect to address")]
     Connect,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use crate::actors::remote::netlayer::{tcp_layer::TcpNetLayer, NetLayer};
+
+    #[tokio::test]
+    async fn listen() {
+        let mut nl = TcpNetLayer::new();
+        nl.init().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn accept() {
+        let mut nl = TcpNetLayer::new();
+        nl.init().await.unwrap();
+
+        let addr = nl.address().unwrap();
+
+        let listen = tokio::spawn(async move { nl.accept().await.map(|_| ()) });
+        tokio::spawn(async move {
+            let _ = TcpNetLayer::new().connect(&addr).await;
+        });
+
+        tokio::time::timeout(Duration::from_millis(1000), listen)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap(); // lmao
+    }
+
+    #[tokio::test]
+    async fn connect() {
+        let mut nl = TcpNetLayer::new();
+        nl.init().await.unwrap();
+
+        let addr = nl.address().unwrap();
+
+        tokio::spawn(async move {
+            let _ = nl.accept().await;
+        });
+        let connect =
+            tokio::spawn(async move { TcpNetLayer::new().connect(&addr).await.map(|_| ()) });
+
+        tokio::time::timeout(Duration::from_millis(1000), connect)
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    }
 }

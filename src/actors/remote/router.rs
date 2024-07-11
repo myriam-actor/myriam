@@ -6,7 +6,7 @@
 //! The wire protocol is defined as follows:
 //!
 //! ## Message
-//! ```
+//! ```ignore
 //! | N_id | Id[N_id] | N_m | M[N_m] |
 //! ```
 //!
@@ -18,7 +18,7 @@
 //! * `M[N_m]`: `N_m` bytes -> `[u8; N_m]`
 //!
 //! ## Reply
-//! ```
+//! ```ignore
 //! | N_r | R[N_r] |
 //! ```
 //!
@@ -265,12 +265,12 @@ impl RouterHandle {
 #[derive(Debug, Clone)]
 pub struct RemoteHandle<I, O, E, D: Dencoder, N: NetLayer> {
     address: ActorAddress,
+    netlayer: N,
 
     _ipd: PhantomData<I>,
     _opd: PhantomData<O>,
     _epd: PhantomData<E>,
     _dpd: PhantomData<D>,
-    _npd: PhantomData<N>,
 }
 
 impl<I, O, E, D, N> RemoteHandle<I, O, E, D, N>
@@ -281,22 +281,26 @@ where
     D: Dencoder,
     N: NetLayer,
 {
-    pub fn new(address: &ActorAddress) -> Self {
+    pub fn new(address: &ActorAddress, netlayer: N) -> Self {
         Self {
             address: address.to_owned(),
+            netlayer,
             _ipd: PhantomData::default(),
             _opd: PhantomData::default(),
             _epd: PhantomData::default(),
             _dpd: PhantomData::default(),
-            _npd: PhantomData::default(),
         }
     }
 
     pub async fn send(&self, msg: Message<I>) -> Result<MsgResult<O, E>, Error> {
-        let mut stream = N::connect(self.address.host()).await.map_err(|err| {
-            tracing::error!("remote handle: failed to connect - {err}");
-            Error::Connect
-        })?;
+        let mut stream = self
+            .netlayer
+            .connect(self.address.host())
+            .await
+            .map_err(|err| {
+                tracing::error!("remote handle: failed to connect - {err}");
+                Error::Connect
+            })?;
 
         let id = hex::decode(self.address.peer_id()).map_err(|err| {
             tracing::error!("remote handle: invalid id - {err}");
@@ -399,7 +403,10 @@ mod tests {
 
         let addr = router.attach(handle).await.unwrap();
 
-        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
+        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
+            &addr,
+            TcpNetLayer::new(),
+        );
 
         let res = remote.send(Message::Task(5)).await.unwrap();
         assert!(matches!(res, Ok(Reply::Task(15))));
@@ -415,7 +422,10 @@ mod tests {
 
         let addr = router.attach(handle).await.unwrap();
 
-        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
+        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
+            &addr,
+            TcpNetLayer::new(),
+        );
 
         let res = remote.send(Message::Ping).await.unwrap();
         assert!(matches!(res, Ok(Reply::Accepted)));
@@ -431,7 +441,10 @@ mod tests {
 
         let addr = router.attach(handle).await.unwrap();
 
-        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
+        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
+            &addr,
+            TcpNetLayer::new(),
+        );
 
         let res = remote.send(Message::Stop).await.unwrap();
         assert!(matches!(res, Ok(Reply::Accepted)));
@@ -449,7 +462,10 @@ mod tests {
 
         let addr = router.attach(handle).await.unwrap();
 
-        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&addr);
+        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
+            &addr,
+            TcpNetLayer::new(),
+        );
 
         let res = remote.send(Message::Ping).await.unwrap();
         assert!(matches!(res, Ok(Reply::Accepted)));

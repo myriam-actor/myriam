@@ -3,6 +3,7 @@ use std::future::Future;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub mod tcp_layer;
+pub mod unix_layer;
 
 pub trait AsyncMsgStream: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static {}
 
@@ -13,8 +14,10 @@ pub trait NetLayer {
 
     fn name() -> &'static str;
 
-    fn connect(addr: &str)
-        -> impl Future<Output = Result<impl AsyncMsgStream, Self::Error>> + Send;
+    fn connect(
+        &self,
+        addr: &str,
+    ) -> impl Future<Output = Result<impl AsyncMsgStream, Self::Error>> + Send;
 
     fn init(&mut self) -> impl Future<Output = Result<(), Self::Error>> + Send;
     fn accept(&self) -> impl Future<Output = Result<impl AsyncMsgStream, Self::Error>> + Send;
