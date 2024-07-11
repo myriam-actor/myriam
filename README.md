@@ -19,7 +19,7 @@ This is a WIP rewrite from scratch. I'm aiming for an API heavily inspired in [G
     let address = router_handle.attach(untyped_handle).await?;
 
     let remote_handle
-        = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&address);
+        = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&address, TcpNetLayer::new());
     //                     type handle once ^
 
     // use RemoteHandle just like a LocalHandle
