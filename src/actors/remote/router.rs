@@ -1,4 +1,3 @@
-use core::panic;
 use std::{collections::HashMap, marker::PhantomData};
 
 use serde::{de::DeserializeOwned, Serialize};
@@ -15,7 +14,7 @@ use crate::{
 use super::{
     address::{self, ActorAddress},
     dencoder::{self, Dencoder},
-    netlayer::{AsyncReadWriteExt, NetLayer},
+    netlayer::{AsyncMsgStream, NetLayer},
 };
 
 #[derive(Debug)]
@@ -27,9 +26,10 @@ impl Router {
         N: NetLayer + Send + 'static,
         <N as NetLayer>::Error: Send,
     {
+        // TODO: optional router config
+
         netlayer.init().await.map_err(|e| {
             tracing::error!("router init: {e}");
-
             Error::Init
         })?;
 
@@ -68,6 +68,9 @@ impl Router {
                         }
                     },
                     Ok(mut stream) = netlayer.accept() => {
+
+                        // TODO: timeout stream reads to avoid DoS
+
                         let id = match try_read_id(&mut stream).await {
                             Ok(id) => id,
                             Err(_) => continue,
@@ -81,7 +84,9 @@ impl Router {
                             },
                         };
 
-                        let _ = try_handle_message(stream, handle). await;
+                        tokio::spawn(async move {
+                            let _ = try_handle_message(stream, handle).await;
+                        });
                     }
                 }
             }
@@ -116,7 +121,7 @@ where
 
 async fn try_handle_message<S>(mut stream: S, handle: UntypedHandle) -> Result<(), Error>
 where
-    S: AsyncReadWriteExt,
+    S: AsyncMsgStream,
 {
     let msg_size = stream.read_u32().await.map_err(|e| {
         tracing::error!("router: recv - could not read msg size - {e}");

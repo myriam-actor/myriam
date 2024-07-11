@@ -1,6 +1,6 @@
 use tokio::net::{TcpListener, TcpStream};
 
-use super::{AsyncReadWriteExt, NetLayer};
+use super::{AsyncMsgStream, NetLayer};
 
 #[derive(Debug)]
 pub struct TcpNetLayer {
@@ -22,7 +22,7 @@ impl NetLayer for TcpNetLayer {
         "tcp"
     }
 
-    async fn connect(addr: &str) -> Result<impl AsyncReadWriteExt, Self::Error> {
+    async fn connect(addr: &str) -> Result<impl AsyncMsgStream, Self::Error> {
         Ok(TcpStream::connect(addr).await.map_err(|e| {
             tracing::error!("connect error {e}");
 
@@ -41,7 +41,7 @@ impl NetLayer for TcpNetLayer {
         Ok(())
     }
 
-    async fn accept(&self) -> Result<impl AsyncReadWriteExt, Self::Error> {
+    async fn accept(&self) -> Result<impl AsyncMsgStream, Self::Error> {
         Ok(self
             .listener
             .as_ref()
