@@ -8,6 +8,7 @@ pub mod actors;
 pub mod messaging;
 
 #[cfg(test)]
+#[allow(unused)]
 mod tests {
     use tokio::sync::OnceCell;
 

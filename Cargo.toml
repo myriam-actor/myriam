@@ -11,10 +11,9 @@ keywords = ["actor", "actors", "distributed", "libp2p"]
 authors = ["Ariela Wenner <arisunz at disroot dot org>"]
 
 [features]
-default = ["remote", "tcp", "unix"]
+default = ["remote", "tcp"]
 remote = ["dep:rand"]
 tcp = ["remote"]
-unix = ["remote"]
 
 [dependencies]
 bincode = "1.3.3"
