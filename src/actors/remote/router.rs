@@ -1,3 +1,33 @@
+//!
+//! Event loop and associated handlers for remote messaging
+//!
+//! # Protocol
+//!
+//! The wire protocol is defined as follows:
+//!
+//! ## Message
+//! ```
+//! | N_id | Id[N_id] | N_m | M[N_m] |
+//! ```
+//!
+//! where
+//!
+//! * `N_id`: 2 bytes -> `u16`
+//! * `Id[N_id]`: `N_id` bytes -> `[u8; N_id]`
+//! * `N_m`: 4 bytes -> `u32`
+//! * `M[N_m]`: `N_m` bytes -> `[u8; N_m]`
+//!
+//! ## Reply
+//! ```
+//! | N_r | R[N_r] |
+//! ```
+//!
+//! where
+//!
+//! * `N_r`: 4 bytes -> `u32`
+//! * `R[N_r]`: `N_m` bytes -> `[u8; N_r]`
+//!
+
 use std::{collections::HashMap, marker::PhantomData};
 
 use serde::{de::DeserializeOwned, Serialize};
