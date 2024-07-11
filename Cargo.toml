@@ -11,18 +11,18 @@ keywords = ["actor", "actors", "distributed", "libp2p"]
 authors = ["Ariela Wenner <arisunz at disroot dot org>"]
 
 [features]
-default = ["remote", "tokio"]
-remote = ["tokio"]
-tokio = ["dep:tokio"]
-async_std = []
+default = ["remote", "tcp", "unix"]
+remote = ["dep:rand"]
+tcp = ["remote"]
+unix = ["remote"]
 
 [dependencies]
 bincode = "1.3.3"
 hex = "0.4.3"
-rand = "0.8.5"
+rand = { version = "0.8.5", optional = true }
 serde = { version = "1.0.203", features = ["derive"] }
 thiserror = "1.0.61"
-tokio = { version = "1.38.0", features = ["full"], optional = true }
+tokio = { version = "1.38.0", features = ["full"] }
 tracing = "0.1.40"
 
 [dev-dependencies]

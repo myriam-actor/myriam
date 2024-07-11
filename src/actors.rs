@@ -1,6 +1,8 @@
 use std::future::Future;
 
 pub mod local;
+
+#[cfg(feature = "remote")]
 pub mod remote;
 
 pub trait Actor<I, O, E> {
