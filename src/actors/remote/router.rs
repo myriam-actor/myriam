@@ -105,7 +105,7 @@ async fn try_read_id<S>(stream: &mut S) -> Result<String, Error>
 where
     S: AsyncReadExt + Unpin,
 {
-    let size = stream.read_u32().await.map_err(|e| {
+    let size = stream.read_u16().await.map_err(|e| {
         tracing::error!("router: could not read id size - {e}");
         Error::Recv
     })?;
@@ -269,9 +269,9 @@ where
             Error::Connect
         })?;
 
-        let id_len = id.len() as u32;
+        let id_len = id.len() as u16;
 
-        stream.write_u32(id_len).await.map_err(|err| {
+        stream.write_u16(id_len).await.map_err(|err| {
             tracing::error!("remote handle: failed to send peer ID size - {err}");
             Error::Send
         })?;
