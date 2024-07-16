@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use rand::Rng;
 
 use super::netlayer::NetLayer;
@@ -58,6 +60,10 @@ impl ActorAddress {
     pub fn host(&self) -> &str {
         &self.host
     }
+
+    pub fn to_string(&self) -> String {
+        format!("{}:{}@{}", self.proto_id, self.peer_id, self.host)
+    }
 }
 
 impl TryFrom<String> for ActorAddress {
@@ -65,6 +71,18 @@ impl TryFrom<String> for ActorAddress {
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::try_parse(value)
+    }
+}
+
+impl From<ActorAddress> for String {
+    fn from(value: ActorAddress) -> Self {
+        value.to_string()
+    }
+}
+
+impl Display for ActorAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_string())
     }
 }
 

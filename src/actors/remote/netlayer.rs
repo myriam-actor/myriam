@@ -5,6 +5,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 #[cfg(feature = "tcp")]
 pub mod tcp_layer;
 
+#[cfg(feature = "tor")]
+pub mod tor_layer;
+
 pub trait AsyncMsgStream: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static {}
 
 impl<T> AsyncMsgStream for T where T: AsyncReadExt + AsyncWriteExt + Unpin + Send + 'static {}

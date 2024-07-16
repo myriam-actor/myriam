@@ -330,6 +330,11 @@ where
             Error::Send
         })?;
 
+        stream.flush().await.map_err(|err| {
+            tracing::error!("remote handle: failed to send message - {err}");
+            Error::Send
+        })?;
+
         let size = stream.read_u32().await.map_err(|err| {
             tracing::error!("remote handle: failed to receive message size - {err}");
             Error::Recv
