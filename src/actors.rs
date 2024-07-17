@@ -23,6 +23,7 @@ pub trait Actor<I, O, E> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "remote")]
     use serde::{Deserialize, Serialize};
 
     use super::Actor;
@@ -31,7 +32,8 @@ mod tests {
         pub a: u32,
     }
 
-    #[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
+    #[derive(Debug, Clone, thiserror::Error)]
+    #[cfg_attr(feature = "remote", derive(Serialize, Deserialize))]
     #[error("uh oh")]
     pub(crate) struct SomeError;
 
