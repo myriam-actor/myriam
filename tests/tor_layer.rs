@@ -1,3 +1,5 @@
+#![cfg(feature = "tor")]
+
 //!
 //! To run:
 //! 1. create the /tmp/myriam/test directory

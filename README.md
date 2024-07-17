@@ -68,7 +68,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-# License
+## features
+
+* `remote (default)`: support for remote messaging
+* `tcp (default)`: TCP test-only net layer
+* `tor (default)`: Tor net layer - requires a running and properly configured Tor router
+
+# license
 
 Copyright 2024 Ariela Wenner
 
