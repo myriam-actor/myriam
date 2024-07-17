@@ -1,8 +1,7 @@
 //!
 //! TCP actor net layer
 //!
-//! !WARNING! for testing only! no going through these
-//! is encrypted!
+//! !WARNING! for testing only! nothing going through these is encrypted!
 //!
 
 use tokio::net::{TcpListener, TcpStream};
