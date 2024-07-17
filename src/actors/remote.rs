@@ -1,3 +1,7 @@
+//!
+//! support for remote access to local actors
+//!
+
 use dencoder::Dencoder;
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::{mpsc, oneshot};
@@ -14,6 +18,11 @@ pub mod dencoder;
 pub mod netlayer;
 pub mod router;
 
+///
+/// spawn an actor, wrapping it behind an untyped handle.
+///
+/// necessary for registering with a local router.
+///
 pub async fn spawn_untyped<I, O, E, D>(
     actor: impl Actor<I, O, E> + Send + 'static,
 ) -> Result<(LocalHandle<I, O, E>, UntypedHandle), Error>
@@ -70,12 +79,18 @@ where
     Ok((local_handle, UntypedHandle { sender }))
 }
 
+///
+/// untyped handle for remote messaging, when types aren't available.
+///
 #[derive(Debug, Clone)]
 pub struct UntypedHandle {
     sender: mpsc::Sender<(Vec<u8>, oneshot::Sender<Result<Vec<u8>, Error>>)>,
 }
 
 impl UntypedHandle {
+    ///
+    /// attempt to message this actor with an encoded message, getting an encoded response in return.
+    ///
     pub async fn send(&self, msg: Vec<u8>) -> Result<Vec<u8>, Error> {
         let (sender, receiver) = oneshot::channel();
 
@@ -92,6 +107,10 @@ impl UntypedHandle {
     }
 }
 
+///
+/// errors when spawning an actor or messaging through an [`UntypedHandle`]
+///
+#[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to spawn local actor")]

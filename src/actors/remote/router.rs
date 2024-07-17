@@ -1,14 +1,12 @@
 //!
-//! Event loop and associated handlers for remote messaging
+//! event loop and associated handlers for remote messaging
 //!
 //! # Protocol
 //!
 //! The wire protocol is defined as follows:
 //!
 //! ## Message
-//! ```ignore
-//! | N_id | Id[N_id] | N_m | M[N_m] |
-//! ```
+//! ` N_id | Id[N_id] | N_m | M[N_m] `
 //!
 //! where
 //!
@@ -18,9 +16,7 @@
 //! * `M[N_m]`: `N_m` bytes -> `[u8; N_m]`
 //!
 //! ## Reply
-//! ```ignore
-//! | N_r | R[N_r] |
-//! ```
+//! `N_r | R[N_r]`
 //!
 //! where
 //!
@@ -47,10 +43,16 @@ use super::{
     netlayer::{AsyncMsgStream, NetLayer},
 };
 
+///
+/// router for exposing actors under a given net layer
+///
 #[derive(Debug)]
 pub struct Router;
 
 impl Router {
+    ///
+    /// spawn a new router event loop using the given net layer, and return a handle to it
+    ///
     pub async fn with_netlayer<N>(mut netlayer: N) -> Result<RouterHandle, Error>
     where
         N: NetLayer + Send + 'static,
@@ -190,6 +192,9 @@ where
     Ok(())
 }
 
+///
+/// handle for router messaging
+///
 #[derive(Debug)]
 pub struct RouterHandle {
     host_address: String,
@@ -197,6 +202,11 @@ pub struct RouterHandle {
 }
 
 impl RouterHandle {
+    ///
+    /// register an actor, getting a new address for it.
+    ///
+    /// this address can be seen as a capability, and revoked at any time. see [`Self::revoke()`].
+    ///
     pub async fn attach(&self, handle: UntypedHandle) -> Result<ActorAddress, Error> {
         let (sender, receiver) = oneshot::channel();
         self.sender
@@ -217,6 +227,9 @@ impl RouterHandle {
         }
     }
 
+    ///
+    /// revoke this address. any incoming requests using thereafter will be dropped.
+    ///
     pub async fn revoke(&self, address: &ActorAddress) -> Result<ActorAddress, Error> {
         let (sender, receiver) = oneshot::channel();
         self.sender
@@ -237,6 +250,9 @@ impl RouterHandle {
         }
     }
 
+    ///
+    /// stop this router, dropping all registered addresses.
+    ///
     pub async fn stop(&self) -> Result<(), Error> {
         let (sender, receiver) = oneshot::channel();
         self.sender
@@ -257,11 +273,19 @@ impl RouterHandle {
         }
     }
 
+    ///
+    /// this router's exposed host address.
+    ///
+    /// equivalent to calling its net layer's [`NetLayer::address()`]
+    ///
     pub fn host_address(&self) -> &str {
         &self.host_address
     }
 }
 
+///
+/// handle for messaging a remote actor with a given capability.
+///
 #[derive(Debug, Clone)]
 pub struct RemoteHandle<I, O, E, D: Dencoder, N: NetLayer> {
     address: ActorAddress,
@@ -281,6 +305,9 @@ where
     D: Dencoder,
     N: NetLayer,
 {
+    ///
+    /// create a new handle from this address and net layer for messaging
+    ///
     pub fn new(address: &ActorAddress, netlayer: N) -> Self {
         Self {
             address: address.to_owned(),
@@ -292,6 +319,9 @@ where
         }
     }
 
+    ///
+    /// try to message the actor behind our address
+    ///
     pub async fn send(&self, msg: Message<I>) -> Result<MsgResult<O, E>, Error> {
         let mut stream = self
             .netlayer
@@ -362,6 +392,10 @@ enum RouterReply {
     Address(ActorAddress),
 }
 
+///
+/// errors when creating a routing, or messaging an actor with it
+///
+#[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to init router")]

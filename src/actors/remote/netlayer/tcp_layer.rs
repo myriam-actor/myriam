@@ -1,13 +1,28 @@
+//!
+//! TCP actor net layer
+//!
+//! !WARNING! for testing only! no going through these
+//! is encrypted!
+//!
+
 use tokio::net::{TcpListener, TcpStream};
 
 use super::{AsyncMsgStream, NetLayer};
 
+///
+/// simple TCP net layer
+///
+/// Unencrypted! Do not use for anything sensitive!
+///
 #[derive(Debug)]
 pub struct TcpNetLayer {
     listener: Option<TcpListener>,
 }
 
 impl TcpNetLayer {
+    ///
+    /// create a new (not yet listening) TCP net layer
+    ///
     pub fn new() -> Self {
         Self {
             listener: Option::None,
@@ -67,6 +82,10 @@ impl NetLayer for TcpNetLayer {
     }
 }
 
+///
+/// Errors when binding, connecting or accepting connections
+///
+#[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum TcpError {
     #[error("net layer not ready")]

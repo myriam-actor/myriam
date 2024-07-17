@@ -1,3 +1,7 @@
+//!
+//! root module for local and remote actors
+//!
+
 use std::future::Future;
 
 pub mod local;
@@ -5,7 +9,15 @@ pub mod local;
 #[cfg(feature = "remote")]
 pub mod remote;
 
+///
+/// main actor trait
+///
+/// type parameters `I`, `O` and `E` correspond to the handler's input, output and error, respectively.
+///
 pub trait Actor<I, O, E> {
+    ///
+    /// this actor's message handler
+    ///
     fn handler(&mut self, input: I) -> impl Future<Output = Result<O, E>> + Send;
 }
 

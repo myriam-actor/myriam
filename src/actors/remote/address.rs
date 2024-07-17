@@ -1,9 +1,18 @@
+//!
+//! remote address struct and utils
+//!
+
 use std::fmt::Display;
 
 use rand::Rng;
 
 use super::netlayer::NetLayer;
 
+///
+/// revocable address to a remote actor
+///
+/// addresses have the format `<protocol>:<peer id>@<host>`
+///
 #[derive(Debug, Clone)]
 pub struct ActorAddress {
     proto_id: String,
@@ -12,6 +21,9 @@ pub struct ActorAddress {
 }
 
 impl ActorAddress {
+    ///
+    /// create a new address from this host and `NetLayer` parameter
+    ///
     pub fn new<N>(host: &str) -> Result<Self, Error>
     where
         N: NetLayer,
@@ -34,6 +46,9 @@ impl ActorAddress {
         })
     }
 
+    ///
+    /// try to parse an address from the given string
+    ///
     pub fn try_parse(value: String) -> Result<Self, Error> {
         let peer_sep = value.find(':').ok_or(Error::Malformed)?;
         let host_sep = value.find('@').ok_or(Error::Malformed)?;
@@ -49,18 +64,30 @@ impl ActorAddress {
         })
     }
 
+    ///
+    /// this actor's protocol ID
+    ///
     pub fn proto_id(&self) -> &str {
         &self.proto_id
     }
 
+    ///
+    /// this actor's peer ID in the router
+    ///
     pub fn peer_id(&self) -> &str {
         &self.peer_id
     }
 
+    ///
+    /// this actor's host address, or its protocol-related equivalent
+    ///
     pub fn host(&self) -> &str {
         &self.host
     }
 
+    ///
+    /// this address' string representation
+    ///
     pub fn to_string(&self) -> String {
         format!("{}:{}@{}", self.proto_id, self.peer_id, self.host)
     }
@@ -86,6 +113,10 @@ impl Display for ActorAddress {
     }
 }
 
+///
+/// Errors when creating a new address
+///
+#[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("malformed actor address")]

@@ -1,7 +1,14 @@
+//!
+//! Bincode-based Dencoder impl
+//!
+
 use serde::{de::DeserializeOwned, Serialize};
 
 use super::Dencoder;
 
+///
+/// Dencoder implemented over Bincode
+///
 #[derive(Debug)]
 pub struct BincodeDencoder;
 

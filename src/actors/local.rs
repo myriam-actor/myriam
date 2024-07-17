@@ -1,9 +1,16 @@
+//!
+//! local actors, with no net dependencies
+//!
+
 use tokio::sync::{mpsc, oneshot};
 
 use crate::messaging::{Message, MsgError, MsgResult, Reply};
 
 use super::Actor;
 
+///
+/// consume an actor and return a handle to it
+///
 pub async fn spawn<I, O, E>(
     mut actor: impl Actor<I, O, E> + Send + 'static,
 ) -> Result<LocalHandle<I, O, E>, Error>
@@ -55,6 +62,9 @@ where
     }
 }
 
+///
+/// handle for a locally spawned actor
+///
 #[derive(Debug, Clone)]
 pub struct LocalHandle<I, O, E: std::error::Error> {
     sender: mpsc::Sender<(Message<I>, oneshot::Sender<MsgResult<O, E>>)>,
@@ -64,6 +74,9 @@ impl<I, O, E> LocalHandle<I, O, E>
 where
     E: std::error::Error,
 {
+    ///
+    /// attempt to send a message to this actor
+    ///
     pub async fn send(&self, msg: Message<I>) -> MsgResult<O, E> {
         let (sender, receiver) = oneshot::channel();
 
@@ -76,6 +89,10 @@ where
     }
 }
 
+///
+/// Errors when spawning an actor
+///
+#[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to spawn this actor")]

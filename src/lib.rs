@@ -1,8 +1,11 @@
-#![warn(missing_debug_implementations)]
+//!
+//! local and remote implementation of the actor model.
+//!
+//! remote actors are capability-based. traits are exposed for creating new net and message encoding/decoding layers.
+//!
 
-//!
-//! TODO: top level crate docs
-//!
+#![warn(missing_debug_implementations)]
+#![warn(missing_docs)]
 
 pub mod actors;
 pub mod messaging;

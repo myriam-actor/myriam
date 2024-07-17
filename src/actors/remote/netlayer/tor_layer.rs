@@ -1,3 +1,9 @@
+//!
+//! Tor net layer
+//!
+//! Requires properly configured Tor router with a hidden service per router in your application
+//!
+
 use std::path::Path;
 
 use tokio::{
@@ -7,6 +13,9 @@ use tokio::{
 
 use super::NetLayer;
 
+///
+/// Tor net layer
+///
 #[derive(Debug)]
 pub struct TorNetLayer {
     proxy_address: String,
@@ -17,6 +26,9 @@ pub struct TorNetLayer {
 }
 
 impl TorNetLayer {
+    ///
+    /// Create a new Tor layer with the necessary setup for connecting to other actors
+    ///
     pub fn new<S>(proxy_address: S, tordata_dir: S) -> Self
     where
         S: Into<String>,
@@ -30,6 +42,10 @@ impl TorNetLayer {
         }
     }
 
+    ///
+    /// creates a new Tor layer with the required setup for
+    /// exposing this actor to the network
+    ///
     pub async fn new_for_service<S>(
         proxy_address: S,
         local_address: S,
@@ -38,22 +54,42 @@ impl TorNetLayer {
     where
         S: Into<String>,
     {
-        let mut layer = Self::new(proxy_address, tordata_dir);
-        let hostname = layer.hostname().await?;
-        layer.hostname.replace(hostname);
-        layer.local_address.replace(local_address.into());
-
-        Ok(layer)
+        Self::new(proxy_address, tordata_dir)
+            .as_service(local_address)
+            .await
     }
 
+    ///
+    /// create a new layer from this one, capable of accepting connections
+    ///
+    pub async fn as_service<S>(mut self, local_address: S) -> Result<Self, Error>
+    where
+        S: Into<String>,
+    {
+        let hostname = self.hostname().await?;
+        self.hostname.replace(hostname);
+        self.local_address.replace(local_address.into());
+
+        Ok(self)
+    }
+
+    ///
+    /// this layer's proxy address
+    ///
     pub fn proxy_address(&self) -> &str {
         &self.proxy_address
     }
 
+    ///
+    /// this layer's Tor data directory
+    ///
     pub fn tordata_dir(&self) -> &str {
         &self.tordata_dir
     }
 
+    ///
+    /// this layer's .onion address
+    ///
     pub async fn hostname(&self) -> Result<String, Error> {
         let path = Path::new(&self.tordata_dir)
             .join("hostname")
@@ -130,6 +166,10 @@ impl NetLayer for TorNetLayer {
     }
 }
 
+///
+/// errors when binding, accepting and connecting via a Tor net layer
+///
+#[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("failed to bind socket")]
