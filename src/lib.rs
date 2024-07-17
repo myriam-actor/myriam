@@ -1,9 +1,4 @@
-//!
-//! local and remote implementation of the actor model.
-//!
-//! remote actors are capability-based. traits are exposed for creating new net and message encoding/decoding layers.
-//!
-
+#![doc = include_str!("../README.md")]
 #![warn(missing_debug_implementations)]
 #![warn(missing_docs)]
 
