@@ -11,7 +11,7 @@ use myriam::{
             self,
             dencoder::bincode::BincodeDencoder,
             netlayer::tor_layer::TorNetLayer,
-            router::{RemoteHandle, Router},
+            router::{RemoteHandle, Router, RouterOpts},
         },
         Actor,
     },
@@ -30,7 +30,15 @@ async fn roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .unwrap();
 
-    let router = Router::with_netlayer(layer).await.unwrap();
+    let router = Router::with_netlayer(
+        layer,
+        Some(RouterOpts {
+            msg_read_timeout: 60_000,
+            ..Default::default()
+        }),
+    )
+    .await
+    .unwrap();
 
     let addr = router.attach(handle).await.unwrap();
 

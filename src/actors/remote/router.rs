@@ -24,12 +24,12 @@
 //! * `R[N_r]`: `N_m` bytes -> `[u8; N_r]`
 //!
 
-use std::{collections::HashMap, marker::PhantomData};
+use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
 
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    sync::{mpsc, oneshot},
+    sync::{mpsc, oneshot, RwLock},
 };
 
 use crate::{
@@ -53,12 +53,15 @@ impl Router {
     ///
     /// spawn a new router event loop using the given net layer, and return a handle to it
     ///
-    pub async fn with_netlayer<N>(mut netlayer: N) -> Result<RouterHandle, Error>
+    pub async fn with_netlayer<N>(
+        mut netlayer: N,
+        opts: Option<RouterOpts>,
+    ) -> Result<RouterHandle, Error>
     where
         N: NetLayer + Send + 'static,
         <N as NetLayer>::Error: Send,
     {
-        // TODO: optional router config
+        let opts = opts.unwrap_or_default();
 
         netlayer.init().await.map_err(|e| {
             tracing::error!("router init: {e}");
@@ -72,13 +75,15 @@ impl Router {
 
         let host_address_inner = host_address.clone();
 
-        let mut peers: HashMap<String, UntypedHandle> = HashMap::new();
+        let peers: HashMap<String, UntypedHandle> = HashMap::new();
 
         let (sender, mut receiver) =
             mpsc::channel::<(RouterMessage, oneshot::Sender<Result<RouterReply, Error>>)>(1024);
         let (conf_sender, conf_receiver) = oneshot::channel::<Result<(), Error>>();
 
         tokio::spawn(async move {
+            let opts = Arc::new(opts);
+            let peers = Arc::new(RwLock::new(peers));
             let _ = conf_sender.send(Ok(()));
 
             loop {
@@ -96,36 +101,42 @@ impl Router {
                                     continue;
                                 };
 
-                                peers.insert(addr.peer_id().to_owned(), handle);
+                                peers.write().await.insert(addr.peer_id().to_owned(), handle);
 
                                 let _ = sender.send(Ok(RouterReply::Address(addr)));
                             },
                             RouterMessage::Revoke(addr) => {
-                                peers.remove(addr.peer_id());
+                                peers.write().await.remove(addr.peer_id());
 
                                 let _ = sender.send(Ok(RouterReply::Address(addr)));
                             },
                         }
                     },
                     Ok(mut stream) = netlayer.accept() => {
-
-                        // TODO: timeout stream reads to avoid DoS
-
-                        let id = match try_read_id(&mut stream).await {
-                            Ok(id) => id,
-                            Err(_) => continue,
-                        };
-
-                        let handle = match peers.get(&id) {
-                            Some(handle) => handle.clone(),
-                            None => {
-                                tracing::warn!("router: recv - unknown peer {id}");
-                                continue;
-                            },
-                        };
+                        let opts = opts.clone();
+                        let peers = peers.clone();
 
                         tokio::spawn(async move {
-                            let _ = try_handle_message(stream, handle).await;
+                            let _ = tokio::time::timeout(
+                                Duration::from_millis(opts.msg_read_timeout()),
+                                async move {
+                                    let id = match try_read_id(&mut stream).await {
+                                        Ok(id) => id,
+                                        Err(_) => {
+                                            return;
+                                        },
+                                    };
+
+                                    let handle = match peers.read().await.get(&id) {
+                                        Some(handle) => handle.clone(),
+                                        None => {
+                                            tracing::warn!("router: recv - unknown peer {id}");
+                                            return;
+                                        },
+                                    };
+
+                                    let _ = try_handle_message(stream, handle, opts.as_ref()).await;
+                                }).await;
                         });
                     }
                 }
@@ -159,7 +170,11 @@ where
     Ok(hex::encode(id_buffer))
 }
 
-async fn try_handle_message<S>(mut stream: S, handle: UntypedHandle) -> Result<(), Error>
+async fn try_handle_message<S>(
+    mut stream: S,
+    handle: UntypedHandle,
+    opts: &RouterOpts,
+) -> Result<(), Error>
 where
     S: AsyncMsgStream,
 {
@@ -167,6 +182,11 @@ where
         tracing::error!("router: recv - could not read msg size - {e}");
         Error::Recv
     })?;
+
+    if msg_size > opts.max_msg_size() {
+        tracing::warn!("router: recv - incoming message body exceeds size limit; dropping");
+        Err(Error::Recv)?
+    }
 
     let mut msg_buffer = vec![0; msg_size as usize];
     stream.read_exact(&mut msg_buffer).await.map_err(|e| {
@@ -190,6 +210,55 @@ where
     })?;
 
     Ok(())
+}
+
+///
+/// router configuration
+///
+#[derive(Debug)]
+pub struct RouterOpts {
+    ///
+    /// timeout in milliseconds for reading messages from the net layer's stream.
+    ///
+    /// default is 5000.
+    ///
+    pub msg_read_timeout: u64,
+
+    ///
+    /// timeout in milliseconds for reading messages from the net layer's stream.
+    ///
+    /// default is 5000.
+    ///
+    pub max_msg_size: u32,
+}
+
+impl RouterOpts {
+    /// create a new set of router options
+    pub fn new(msg_read_timeout: u64, max_msg_size: u32) -> Self {
+        Self {
+            msg_read_timeout,
+            max_msg_size,
+        }
+    }
+
+    /// get the message read timeout
+    pub fn msg_read_timeout(&self) -> u64 {
+        self.msg_read_timeout
+    }
+
+    /// get the max message size.
+    pub fn max_msg_size(&self) -> u32 {
+        self.max_msg_size
+    }
+}
+
+impl Default for RouterOpts {
+    fn default() -> Self {
+        Self {
+            msg_read_timeout: 5000,
+            max_msg_size: 4194304,
+        }
+    }
 }
 
 ///
@@ -425,7 +494,7 @@ mod tests {
                 self,
                 dencoder::bincode::BincodeDencoder,
                 netlayer::tcp_layer::TcpNetLayer,
-                router::{RemoteHandle, Router},
+                router::{RemoteHandle, Router, RouterOpts},
             },
             tests::{Mult, SomeError},
         },
@@ -438,7 +507,9 @@ mod tests {
             .await
             .unwrap();
 
-        let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
+        let router = Router::with_netlayer(TcpNetLayer::new(), Some(RouterOpts::default()))
+            .await
+            .unwrap();
 
         let addr = router.attach(handle).await.unwrap();
 
@@ -457,7 +528,9 @@ mod tests {
             .await
             .unwrap();
 
-        let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
+        let router = Router::with_netlayer(TcpNetLayer::new(), Some(RouterOpts::default()))
+            .await
+            .unwrap();
 
         let addr = router.attach(handle).await.unwrap();
 
@@ -476,7 +549,9 @@ mod tests {
             .await
             .unwrap();
 
-        let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
+        let router = Router::with_netlayer(TcpNetLayer::new(), Some(RouterOpts::default()))
+            .await
+            .unwrap();
 
         let addr = router.attach(handle).await.unwrap();
 
@@ -497,7 +572,9 @@ mod tests {
             .await
             .unwrap();
 
-        let router = Router::with_netlayer(TcpNetLayer::new()).await.unwrap();
+        let router = Router::with_netlayer(TcpNetLayer::new(), Some(RouterOpts::default()))
+            .await
+            .unwrap();
 
         let addr = router.attach(handle).await.unwrap();
 
