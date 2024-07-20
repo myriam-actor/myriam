@@ -545,9 +545,11 @@ mod tests {
 
     #[tokio::test]
     async fn stop() {
-        let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+        let (_, mut handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
             .await
             .unwrap();
+
+        handle.allow_stop(true);
 
         let router = Router::with_netlayer(TcpNetLayer::new(), Some(RouterOpts::default()))
             .await

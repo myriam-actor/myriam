@@ -14,6 +14,9 @@ pub enum Message<Input> {
     /// task request with known input
     Task(Input),
 
+    /// task request requiring mutation
+    TaskMut(Input),
+
     /// ping this actor for liveness
     Ping,
 
@@ -54,4 +57,10 @@ pub enum MsgError<Error: std::error::Error> {
 
     #[error("message processed but task failed")]
     Task(#[from] Error),
+
+    #[error("mutation required but not allowed")]
+    Mut,
+
+    #[error("stop request not allowed")]
+    Stop,
 }

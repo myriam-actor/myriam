@@ -6,7 +6,7 @@ use dencoder::Dencoder;
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::{mpsc, oneshot};
 
-use crate::messaging::Message;
+use crate::messaging::{Message, MsgError, MsgResult};
 
 use super::{
     local::{self, LocalHandle},
@@ -35,14 +35,21 @@ where
     let local_handle = local::spawn(actor).await?;
     let inner_handle = local_handle.clone();
     let (sender, mut receiver) =
-        mpsc::channel::<(Vec<u8>, oneshot::Sender<Result<Vec<u8>, Error>>)>(1024);
+        mpsc::channel::<(Vec<u8>, HandleOpts, oneshot::Sender<Result<Vec<u8>, Error>>)>(1024);
     let (conf_sender, conf_receiver) = oneshot::channel::<Result<(), Error>>();
 
     tokio::spawn(async move {
         let _ = conf_sender.send(Ok(()));
-        while let Some((msg, sender)) = receiver.recv().await {
-            match D::decode(msg) {
+        while let Some((msg, opts, sender)) = receiver.recv().await {
+            match D::decode::<Message<I>>(msg) {
                 Ok(msg) => {
+                    if let Err(err) = opts.validate::<I, E>(&msg) {
+                        let err: MsgResult<O, E> = Err(err);
+                        let res = D::encode(err).map_err(|_| Error::Encode);
+                        let _ = sender.send(res);
+                        continue;
+                    }
+
                     let stop_msg = matches!(msg, Message::<I>::Stop);
 
                     let res = inner_handle.send(msg).await;
@@ -76,7 +83,58 @@ where
 
     conf_receiver.await.map_err(|_| Error::Spawn)??;
 
-    Ok((local_handle, UntypedHandle { sender }))
+    Ok((
+        local_handle,
+        UntypedHandle {
+            sender,
+            opts: HandleOpts::new(),
+        },
+    ))
+}
+
+///
+/// options for this handle
+///
+#[derive(Debug, Clone)]
+pub struct HandleOpts {
+    allow_mut: bool,
+    allow_stop: bool,
+}
+
+impl HandleOpts {
+    ///
+    /// new option set with defaults:
+    ///
+    /// * allow mutation: false
+    /// * allow stopping: false
+    ///
+    pub fn new() -> Self {
+        Self {
+            allow_mut: false,
+            allow_stop: false,
+        }
+    }
+
+    ///
+    /// validate message according to this option set
+    ///
+    pub fn validate<I, E: std::error::Error>(&self, msg: &Message<I>) -> Result<(), MsgError<E>> {
+        match msg {
+            Message::TaskMut(_) if !self.allow_mut => Err(MsgError::Mut),
+            Message::Stop if !self.allow_stop => Err(MsgError::Stop),
+            _ => Ok(()),
+        }
+    }
+
+    /// whether this handle relays messages requiring mutation
+    pub fn allow_mut(&self) -> bool {
+        self.allow_mut
+    }
+
+    /// whether this handle relays `Stop` messages
+    pub fn allow_stop(&self) -> bool {
+        self.allow_stop
+    }
 }
 
 ///
@@ -84,7 +142,8 @@ where
 ///
 #[derive(Debug, Clone)]
 pub struct UntypedHandle {
-    sender: mpsc::Sender<(Vec<u8>, oneshot::Sender<Result<Vec<u8>, Error>>)>,
+    sender: mpsc::Sender<(Vec<u8>, HandleOpts, oneshot::Sender<Result<Vec<u8>, Error>>)>,
+    opts: HandleOpts,
 }
 
 impl UntypedHandle {
@@ -94,16 +153,37 @@ impl UntypedHandle {
     pub async fn send(&self, msg: Vec<u8>) -> Result<Vec<u8>, Error> {
         let (sender, receiver) = oneshot::channel();
 
-        self.sender.send((msg, sender)).await.map_err(|e| {
-            tracing::error!("untyped send: {e}");
+        self.sender
+            .send((msg, self.opts.clone(), sender))
+            .await
+            .map_err(|e| {
+                tracing::error!("untyped send: {e}");
 
-            Error::Send
-        })?;
+                Error::Send
+            })?;
 
         receiver.await.map_err(|e| {
             tracing::error!("untyped recv: {e}");
             Error::Recv
         })?
+    }
+
+    ///
+    /// whether to allow this handle to relay messages requiring mutation.
+    ///
+    /// off by default.
+    ///
+    pub fn allow_mut(&mut self, allow: bool) {
+        self.opts.allow_mut = allow;
+    }
+
+    ///
+    /// whether to allow this handle to relay `Stop` messages.
+    ///
+    /// off by default.
+    ///
+    pub fn allow_stop(&mut self, allow: bool) {
+        self.opts.allow_stop = allow;
     }
 }
 
@@ -141,7 +221,7 @@ mod tests {
             remote::dencoder::{bincode::BincodeDencoder, Dencoder},
             tests::*,
         },
-        messaging::{Message, MsgResult, Reply},
+        messaging::{Message, MsgError, MsgResult, Reply},
     };
 
     #[tokio::test]
@@ -184,9 +264,11 @@ mod tests {
     async fn stop() {
         let mult = Mult { a: 2 };
 
-        let (_, handle) = super::spawn_untyped::<_, _, _, BincodeDencoder>(mult)
+        let (_, mut handle) = super::spawn_untyped::<_, _, _, BincodeDencoder>(mult)
             .await
             .unwrap();
+
+        handle.allow_stop(true);
 
         let msg = BincodeDencoder::encode(Message::<u32>::Stop).unwrap();
 
@@ -202,5 +284,23 @@ mod tests {
         let msg = BincodeDencoder::encode(Message::<u32>::Ping).unwrap();
 
         handle.send(msg).await.unwrap_err();
+    }
+
+    #[tokio::test]
+    async fn disallow_mut() {
+        let mult = Mult { a: 2 };
+
+        let (_, handle) = super::spawn_untyped::<_, _, _, BincodeDencoder>(mult)
+            .await
+            .unwrap();
+
+        let msg = BincodeDencoder::encode(Message::<u32>::TaskMut(6)).unwrap();
+
+        let raw = handle.send(msg).await.unwrap();
+        let res = BincodeDencoder::decode::<MsgResult<u32, SomeError>>(raw)
+            .unwrap()
+            .unwrap_err();
+
+        assert!(matches!(res, MsgError::Mut));
     }
 }

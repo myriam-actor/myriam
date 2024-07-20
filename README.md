@@ -28,7 +28,7 @@ struct Mult {
 struct SomeError;
 
 impl Actor<u32, u32, SomeError> for Mult {
-    async fn handler(&mut self, input: u32) -> Result<u32, SomeError> {
+    async fn handler(&self, input: u32) -> Result<u32, SomeError> {
         Ok(input * self.a)
     }
 }

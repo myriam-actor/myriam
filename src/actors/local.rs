@@ -36,6 +36,15 @@ where
 
                     try_send_reply(sender, result);
                 }
+                Message::TaskMut(input) => {
+                    let result = match actor.handler_mut(input).await {
+                        Ok(Some(res)) => Ok(Reply::Task(res)),
+                        Ok(None) => Ok(Reply::Accepted),
+                        Err(err) => Err(MsgError::Task(err)),
+                    };
+
+                    try_send_reply(sender, result);
+                }
                 Message::Ping => {
                     try_send_reply(sender, Ok(Reply::Accepted));
                 }
