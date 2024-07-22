@@ -5,6 +5,7 @@
 use std::{fmt::Display, str::FromStr};
 
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 
 use super::netlayer::NetLayer;
 
@@ -13,7 +14,7 @@ use super::netlayer::NetLayer;
 ///
 /// addresses have the format `<protocol>:<peer id>@<host>`
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActorAddress {
     proto_id: String,
     peer_id: String,
