@@ -2,7 +2,7 @@
 //! remote address struct and utils
 //!
 
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 use rand::Rng;
 
@@ -49,7 +49,7 @@ impl ActorAddress {
     ///
     /// try to parse an address from the given string
     ///
-    pub fn try_parse(value: String) -> Result<Self, Error> {
+    pub fn try_parse(value: &str) -> Result<Self, Error> {
         let peer_sep = value.find(':').ok_or(Error::Malformed)?;
         let host_sep = value.find('@').ok_or(Error::Malformed)?;
 
@@ -93,11 +93,19 @@ impl ActorAddress {
     }
 }
 
+impl FromStr for ActorAddress {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_parse(s)
+    }
+}
+
 impl TryFrom<String> for ActorAddress {
     type Error = Error;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::try_parse(value)
+        Self::try_parse(&value)
     }
 }
 
