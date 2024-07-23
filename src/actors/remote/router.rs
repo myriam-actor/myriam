@@ -447,6 +447,11 @@ where
 
         Ok(D::decode(res_buffer)?)
     }
+
+    /// [`ActorAddress`] pointed to by this handle
+    pub fn addr(&self) -> &ActorAddress {
+        &self.address
+    }
 }
 
 #[derive(Debug)]
