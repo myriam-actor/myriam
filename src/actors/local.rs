@@ -96,6 +96,21 @@ where
 
         receiver.await.map_err(|_| MsgError::Recv)?
     }
+
+    ///
+    /// attempt to send a message to this actor
+    ///
+    /// this is a convenience method to use outside async contexts
+    ///
+    pub fn blocking_send(&self, msg: Message<I>) -> MsgResult<O, E> {
+        let (sender, receiver) = oneshot::channel();
+
+        self.sender
+            .blocking_send((msg, sender))
+            .map_err(|_| MsgError::Send)?;
+
+        receiver.blocking_recv().map_err(|_| MsgError::Recv)?
+    }
 }
 
 ///
@@ -111,6 +126,8 @@ pub enum Error {
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
+
+    use tokio::{runtime::Runtime, sync::oneshot};
 
     use crate::{
         actors::tests::Mult,
@@ -151,5 +168,30 @@ mod tests {
         let _ = tokio::time::sleep(Duration::from_millis(10)).await;
 
         handle.send(Message::Ping).await.unwrap_err();
+    }
+
+    #[test]
+    fn blocking_send() {
+        let rt = Runtime::new().unwrap();
+
+        let (handler_sender, handler_receiver) = oneshot::channel();
+        let (compl_sender, compl_receiver) = oneshot::channel();
+
+        std::thread::spawn(move || {
+            rt.block_on(async move {
+                let mult = Mult { a: 2 };
+                let handle = super::spawn(mult).await.unwrap();
+
+                handler_sender.send(handle).unwrap();
+                let _ = compl_receiver.await;
+            });
+        });
+
+        let handle = handler_receiver.blocking_recv().unwrap();
+        let reply = handle.blocking_send(Message::Task(15)).unwrap();
+
+        assert!(matches!(reply, Reply::Task(30)));
+
+        compl_sender.send(()).unwrap();
     }
 }
