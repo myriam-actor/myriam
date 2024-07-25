@@ -1,0 +1,7 @@
+SafeLogging 0
+
+HiddenServiceDir /tmp/chatapp/alice
+HiddenServicePort 80 127.0.0.1:8080
+
+HiddenServiceDir /tmp/chatapp/bob
+HiddenServicePort 80 127.0.0.1:8081
