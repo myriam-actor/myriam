@@ -24,7 +24,7 @@ impl<T> AsyncMsgStream for T where T: AsyncReadExt + AsyncWriteExt + Unpin + Sen
 ///
 pub trait NetLayer {
     /// errors during net layer operation
-    type Error: std::error::Error;
+    type Error;
 
     ///
     /// net layer's identifier, using during actor address construction

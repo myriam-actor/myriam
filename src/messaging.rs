@@ -48,7 +48,7 @@ pub type MsgResult<Output, Error> = Result<Reply<Output>, MsgError<Error>>;
 #[allow(missing_docs)]
 #[derive(Debug, thiserror::Error)]
 #[cfg_attr(feature = "remote", derive(Serialize, Deserialize))]
-pub enum MsgError<Error: std::error::Error> {
+pub enum MsgError<Error> {
     #[error("failed to send message through channel")]
     Send,
 

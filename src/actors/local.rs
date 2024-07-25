@@ -17,7 +17,7 @@ pub async fn spawn<I, O, E>(
 where
     I: Send + 'static,
     O: Send + 'static,
-    E: Send + std::error::Error + 'static,
+    E: Send + 'static,
 {
     // TODO: non-arbitrary channel bound
     let (sender, mut receiver) =
@@ -62,10 +62,7 @@ where
     Ok(LocalHandle { sender })
 }
 
-fn try_send_reply<O, E>(sender: oneshot::Sender<MsgResult<O, E>>, reply: MsgResult<O, E>)
-where
-    E: std::error::Error,
-{
+fn try_send_reply<O, E>(sender: oneshot::Sender<MsgResult<O, E>>, reply: MsgResult<O, E>) {
     if let Err(_) = sender.send(reply) {
         tracing::error!("local: failed to send reply");
     }
@@ -75,14 +72,11 @@ where
 /// handle for a locally spawned actor
 ///
 #[derive(Debug, Clone)]
-pub struct LocalHandle<I, O, E: std::error::Error> {
+pub struct LocalHandle<I, O, E> {
     sender: mpsc::Sender<(Message<I>, oneshot::Sender<MsgResult<O, E>>)>,
 }
 
-impl<I, O, E> LocalHandle<I, O, E>
-where
-    E: std::error::Error,
-{
+impl<I, O, E> LocalHandle<I, O, E> {
     ///
     /// attempt to send a message to this actor
     ///

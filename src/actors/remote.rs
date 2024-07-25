@@ -29,7 +29,7 @@ pub async fn spawn_untyped<I, O, E, D>(
 where
     I: Clone + Send + DeserializeOwned + 'static,
     O: Clone + Send + Serialize + 'static,
-    E: Clone + Send + Serialize + std::error::Error + 'static,
+    E: Clone + Send + Serialize + 'static,
     D: Dencoder,
 {
     let local_handle = local::spawn(actor).await?;
@@ -118,7 +118,7 @@ impl HandleOpts {
     ///
     /// validate message according to this option set
     ///
-    pub fn validate<I, E: std::error::Error>(&self, msg: &Message<I>) -> Result<(), MsgError<E>> {
+    pub fn validate<I, E>(&self, msg: &Message<I>) -> Result<(), MsgError<E>> {
         match msg {
             Message::TaskMut(_) if !self.allow_mut => Err(MsgError::Mut),
             Message::Stop if !self.allow_stop => Err(MsgError::Stop),

@@ -59,7 +59,7 @@ impl Router {
     ) -> Result<RouterHandle, Error>
     where
         N: NetLayer + Send + 'static,
-        <N as NetLayer>::Error: Send,
+        <N as NetLayer>::Error: Send + std::fmt::Display,
     {
         let opts = opts.unwrap_or_default();
 
@@ -370,7 +370,7 @@ impl<I, O, E, D, N> RemoteHandle<I, O, E, D, N>
 where
     I: Serialize + DeserializeOwned,
     O: Serialize + DeserializeOwned,
-    E: Serialize + DeserializeOwned + std::error::Error,
+    E: Serialize + DeserializeOwned,
     D: Dencoder,
     N: NetLayer,
 {
@@ -391,7 +391,10 @@ where
     ///
     /// try to message the actor behind our address
     ///
-    pub async fn send(&self, msg: Message<I>) -> Result<MsgResult<O, E>, Error> {
+    pub async fn send(&self, msg: Message<I>) -> Result<MsgResult<O, E>, Error>
+    where
+        <N as NetLayer>::Error: std::fmt::Display,
+    {
         let mut stream = self
             .netlayer
             .connect(self.address.host())
