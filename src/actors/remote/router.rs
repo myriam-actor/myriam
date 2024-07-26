@@ -24,7 +24,7 @@
 //! * `R[N_r]`: `N_m` bytes -> `[u8; N_r]`
 //!
 
-use std::{collections::HashMap, marker::PhantomData, sync::Arc, time::Duration};
+use std::{collections::HashMap, fmt::Display, marker::PhantomData, sync::Arc, time::Duration};
 
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::{
@@ -65,12 +65,12 @@ impl Router {
 
         netlayer.init().await.map_err(|e| {
             tracing::error!("router init: {e}");
-            Error::Init
+            Error::Init(e.to_string())
         })?;
 
         let host_address = netlayer.address().map_err(|e| {
             tracing::error!("router init: failed to obtain address - {e}");
-            Error::Init
+            Error::Init(e.to_string())
         })?;
 
         let host_address_inner = host_address.clone();
@@ -143,7 +143,9 @@ impl Router {
             }
         });
 
-        conf_receiver.await.map_err(|_| Error::Init)??;
+        conf_receiver
+            .await
+            .map_err(|e| Error::Init(e.to_string()))??;
 
         Ok(RouterHandle {
             sender,
@@ -158,13 +160,13 @@ where
 {
     let size = stream.read_u16().await.map_err(|e| {
         tracing::error!("router: could not read id size - {e}");
-        Error::Recv
+        Error::Recv(e.to_string())
     })?;
 
     let mut id_buffer: Vec<u8> = vec![0; size as usize];
-    stream.read_exact(&mut id_buffer).await.map_err(|err| {
-        tracing::error!("router: recv - {err}");
-        Error::Recv
+    stream.read_exact(&mut id_buffer).await.map_err(|e| {
+        tracing::error!("router: recv - {e}");
+        Error::Recv(e.to_string())
     })?;
 
     Ok(hex::encode(id_buffer))
@@ -180,33 +182,33 @@ where
 {
     let msg_size = stream.read_u32().await.map_err(|e| {
         tracing::error!("router: recv - could not read msg size - {e}");
-        Error::Recv
+        Error::Recv(e.to_string())
     })?;
 
     if msg_size > opts.max_msg_size() {
         tracing::warn!("router: recv - incoming message body exceeds size limit; dropping");
-        Err(Error::Recv)?
+        Err(Error::Recv("message too big".into()))?
     }
 
     let mut msg_buffer = vec![0; msg_size as usize];
     stream.read_exact(&mut msg_buffer).await.map_err(|e| {
         tracing::error!("router: recv - could not read msg - {e}");
-        Error::Recv
+        Error::Recv(e.to_string())
     })?;
 
     let res = handle.send(msg_buffer).await.map_err(|err| {
         tracing::error!("router: msg error - {err}");
-        Error::Send
+        Error::Send(err.to_string())
     })?;
 
     stream.write_u32(res.len() as u32).await.map_err(|err| {
         tracing::error!("router: could not send response size - {err}");
-        Error::Send
+        Error::Send(err.to_string())
     })?;
 
     stream.write_all(&res).await.map_err(|err| {
         tracing::error!("router: could not send response - {err}");
-        Error::Send
+        Error::Send(err.to_string())
     })?;
 
     Ok(())
@@ -283,13 +285,12 @@ impl RouterHandle {
             .await
             .map_err(|e| {
                 tracing::error!("router: {e}");
-
-                Error::Send
+                Error::Send(e.to_string())
             })?;
 
         match receiver.await.map_err(|e| {
             tracing::error!("router: {e}");
-            Error::Recv
+            Error::Recv(e.to_string())
         })?? {
             RouterReply::Accepted => panic!("expected Address variant"),
             RouterReply::Address(a) => Ok(a),
@@ -307,12 +308,12 @@ impl RouterHandle {
             .map_err(|e| {
                 tracing::error!("router: {e}");
 
-                Error::Send
+                Error::Send(e.to_string())
             })?;
 
         match receiver.await.map_err(|e| {
             tracing::error!("router: {e}");
-            Error::Recv
+            Error::Recv(e.to_string())
         })?? {
             RouterReply::Accepted => panic!("expected Address variant"),
             RouterReply::Address(a) => Ok(a),
@@ -330,12 +331,12 @@ impl RouterHandle {
             .map_err(|e| {
                 tracing::error!("router: {e}");
 
-                Error::Send
+                Error::Send(e.to_string())
             })?;
 
         match receiver.await.map_err(|e| {
             tracing::error!("router: {e}");
-            Error::Recv
+            Error::Recv(e.to_string())
         })?? {
             RouterReply::Accepted => Ok(()),
             RouterReply::Address(_) => panic!("expected Accepted variant"),
@@ -401,54 +402,54 @@ where
             .await
             .map_err(|err| {
                 tracing::error!("remote handle: failed to connect - {err}");
-                Error::Connect
+                Error::Connect(err.to_string())
             })?;
 
         let id = hex::decode(self.address.peer_id()).map_err(|err| {
             tracing::error!("remote handle: invalid id - {err}");
-            Error::Connect
+            Error::Connect(err.to_string())
         })?;
 
         let id_len = id.len() as u16;
 
         stream.write_u16(id_len).await.map_err(|err| {
             tracing::error!("remote handle: failed to send peer ID size - {err}");
-            Error::Send
+            Error::Send(err.to_string())
         })?;
 
         stream.write_all(&id).await.map_err(|err| {
             tracing::error!("remote handle: failed to send peer ID - {err}");
-            Error::Send
+            Error::Send(err.to_string())
         })?;
 
-        let bytes = D::encode(msg)?;
+        let bytes = D::encode(msg).map_err(|e| Error::Serialize(e))?;
         stream.write_u32(bytes.len() as u32).await.map_err(|err| {
             tracing::error!("remote handle: failed to send message size - {err}");
-            Error::Send
+            Error::Send(err.to_string())
         })?;
 
         stream.write_all(&bytes).await.map_err(|err| {
             tracing::error!("remote handle: failed to send message - {err}");
-            Error::Send
+            Error::Send(err.to_string())
         })?;
 
         stream.flush().await.map_err(|err| {
             tracing::error!("remote handle: failed to send message - {err}");
-            Error::Send
+            Error::Send(err.to_string())
         })?;
 
         let size = stream.read_u32().await.map_err(|err| {
             tracing::error!("remote handle: failed to receive message size - {err}");
-            Error::Recv
+            Error::Recv(err.to_string())
         })?;
 
         let mut res_buffer = vec![0; size as usize];
         stream.read_exact(&mut res_buffer).await.map_err(|err| {
             tracing::error!("remote handle: failed to receive message - {err}");
-            Error::Recv
+            Error::Recv(err.to_string())
         })?;
 
-        Ok(D::decode(res_buffer)?)
+        Ok(D::decode(res_buffer).map_err(|e| Error::Serialize(e))?)
     }
 
     /// [`ActorAddress`] pointed to by this handle
@@ -473,26 +474,30 @@ enum RouterReply {
 /// errors when creating a routing, or messaging an actor with it
 ///
 #[allow(missing_docs)]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("failed to init router")]
-    Init,
-
-    #[error("failed to connect to host")]
-    Connect,
-
-    #[error("failed to de/serialize message")]
-    Serialize(#[from] dencoder::Error),
-
-    #[error("failed to send message to router")]
-    Send,
-
-    #[error("failed to receive response from router")]
-    Recv,
-
-    #[error("{0}")]
-    Address(#[from] address::Error),
+    Init(String),
+    Connect(String),
+    Serialize(dencoder::Error),
+    Send(String),
+    Recv(String),
+    Address(address::Error),
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Init(ctx) => write!(f, "failed to init router: {ctx}"),
+            Error::Connect(ctx) => write!(f, "failed to connect to endpoint: {ctx}"),
+            Error::Serialize(ctx) => write!(f, "failed to encode/decode message: {ctx}"),
+            Error::Send(ctx) => write!(f, "failed to send message: {ctx}"),
+            Error::Recv(ctx) => write!(f, "failed to receive message: {ctx}"),
+            Error::Address(ctx) => write!(f, "failed to create address: {ctx}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {

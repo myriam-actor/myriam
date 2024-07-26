@@ -4,7 +4,7 @@
 //! Requires properly configured Tor router with a hidden service per router in your application
 //!
 
-use std::path::Path;
+use std::{fmt::Display, path::Path};
 
 use tokio::{
     io::BufStream,
@@ -96,12 +96,12 @@ impl TorNetLayer {
             .canonicalize()
             .map_err(|e| {
                 tracing::error!("tor layer - hostname : {e}");
-                Error::Hostname
+                Error::Hostname(e.to_string())
             })?;
 
         tokio::fs::read_to_string(path).await.map_err(|e| {
             tracing::error!("tor layer - hostname: {e}");
-            Error::Hostname
+            Error::Hostname(e.to_string())
         })
     }
 }
@@ -118,7 +118,7 @@ impl NetLayer for TorNetLayer {
             .await
             .map_err(|err| {
                 tracing::error!("tor socket: proxy connect - {err}");
-                Error::Connect
+                Error::Connect(err.to_string())
             })?;
 
         let mut stream = BufStream::new(proxy);
@@ -126,7 +126,7 @@ impl NetLayer for TorNetLayer {
             .await
             .map_err(|err| {
                 tracing::error!("tor socket: connect - {err}");
-                Error::Connect
+                Error::Connect(err.to_string())
             })?;
 
         Ok(stream)
@@ -138,7 +138,7 @@ impl NetLayer for TorNetLayer {
                 .await
                 .map_err(|e| {
                     tracing::error!("tor socket - init: {e}");
-                    Error::Init
+                    Error::Init(e.to_string())
                 })?,
         );
 
@@ -153,7 +153,7 @@ impl NetLayer for TorNetLayer {
             .await
             .map_err(|e| {
                 tracing::error!("tor layer: failed to accept - {e}");
-                Error::Recv
+                Error::Recv(e.to_string())
             })
             .map(|s| s.0)
     }
@@ -170,20 +170,25 @@ impl NetLayer for TorNetLayer {
 /// errors when binding, accepting and connecting via a Tor net layer
 ///
 #[allow(missing_docs)]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("failed to bind socket")]
-    Init,
-
-    #[error("failed to wait for or receive message")]
-    Recv,
-
-    #[error("failed to connect")]
-    Connect,
-
-    #[error("failed to read pathname for hidden service")]
-    Hostname,
-
-    #[error("service not ready or not set for listening")]
+    Init(String),
+    Recv(String),
+    Connect(String),
+    Hostname(String),
     NotReady,
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Init(ctx) => write!(f, "failed to init layer: {ctx}"),
+            Error::Recv(ctx) => write!(f, "failed to receive data: {ctx}"),
+            Error::Connect(ctx) => write!(f, "failed to connect to endpoint: {ctx}"),
+            Error::Hostname(ctx) => write!(f, "failed to recover our hostname: {ctx}"),
+            Error::NotReady => write!(f, "layer not ready"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}

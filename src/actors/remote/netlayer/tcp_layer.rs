@@ -4,6 +4,8 @@
 //! !WARNING! for testing only! nothing going through these is encrypted!
 //!
 
+use std::fmt::Display;
+
 use tokio::net::{TcpListener, TcpStream};
 
 use super::{AsyncMsgStream, NetLayer};
@@ -40,7 +42,7 @@ impl NetLayer for TcpNetLayer {
         Ok(TcpStream::connect(addr).await.map_err(|e| {
             tracing::error!("connect error {e}");
 
-            TcpError::Connect
+            TcpError::Connect(e.to_string())
         })?)
     }
 
@@ -49,7 +51,7 @@ impl NetLayer for TcpNetLayer {
             .replace(TcpListener::bind("0.0.0.0:0").await.map_err(|e| {
                 tracing::error!("bind error: {e}");
 
-                TcpError::Bind
+                TcpError::Bind(e.to_string())
             })?);
 
         Ok(())
@@ -65,7 +67,7 @@ impl NetLayer for TcpNetLayer {
             .map_err(|e| {
                 tracing::error!("accept error: {e}");
 
-                TcpError::Accept
+                TcpError::Accept(e.to_string())
             })?
             .0)
     }
@@ -85,20 +87,26 @@ impl NetLayer for TcpNetLayer {
 /// Errors when binding, connecting or accepting connections
 ///
 #[allow(missing_docs)]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum TcpError {
-    #[error("net layer not ready")]
     NotReady,
-
-    #[error("failed to bind net layer to address")]
-    Bind,
-
-    #[error("failed to accept new connection")]
-    Accept,
-
-    #[error("failed to connect to address")]
-    Connect,
+    Bind(String),
+    Accept(String),
+    Connect(String),
 }
+
+impl Display for TcpError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TcpError::NotReady => write!(f, "net layer not ready"),
+            TcpError::Bind(ctx) => write!(f, "failed to bind to address: {ctx}"),
+            TcpError::Accept(ctx) => write!(f, "failed to accept connection: {ctx}"),
+            TcpError::Connect(ctx) => write!(f, "failed to connect to address: {ctx}"),
+        }
+    }
+}
+
+impl std::error::Error for TcpError {}
 
 #[cfg(test)]
 mod tests {

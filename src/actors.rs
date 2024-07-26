@@ -30,6 +30,8 @@ pub trait Actor<I, O, E> {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Display;
+
     #[cfg(feature = "remote")]
     use serde::{Deserialize, Serialize};
 
@@ -39,10 +41,15 @@ mod tests {
         pub a: u32,
     }
 
-    #[derive(Debug, Clone, thiserror::Error)]
+    #[derive(Debug, Clone)]
     #[cfg_attr(feature = "remote", derive(Serialize, Deserialize))]
-    #[error("uh oh")]
     pub(crate) struct SomeError;
+
+    impl Display for SomeError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "uh oh")
+        }
+    }
 
     impl Actor<u32, u32, SomeError> for Mult {
         async fn handler(&self, input: u32) -> Result<u32, SomeError> {

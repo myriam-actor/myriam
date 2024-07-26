@@ -7,6 +7,8 @@
 //! yes. yes it is.
 //!
 
+use std::fmt::Display;
+
 use serde::{de::DeserializeOwned, Serialize};
 
 pub mod bincode;
@@ -25,12 +27,20 @@ pub trait Dencoder {
 ///
 /// possible errors when de/coding values
 ///
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 #[allow(missing_docs)]
 pub enum Error {
-    #[error("failed to encode message")]
-    Encode,
-
-    #[error("failed to decode message")]
-    Decode,
+    Encode(String),
+    Decode(String),
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Encode(ctx) => write!(f, "failed to encode message: {ctx}"),
+            Error::Decode(ctx) => write!(f, "failed to decode message: {ctx}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}

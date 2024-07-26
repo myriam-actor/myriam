@@ -2,6 +2,8 @@
 //! support for remote access to local actors
 //!
 
+use std::fmt::Display;
+
 use dencoder::Dencoder;
 use serde::{de::DeserializeOwned, Serialize};
 use tokio::sync::{mpsc, oneshot};
@@ -32,7 +34,7 @@ where
     E: Clone + Send + Serialize + 'static,
     D: Dencoder,
 {
-    let local_handle = local::spawn(actor).await?;
+    let local_handle = local::spawn(actor).await.map_err(|e| Error::Local(e))?;
     let inner_handle = local_handle.clone();
     let (sender, mut receiver) =
         mpsc::channel::<(Vec<u8>, HandleOpts, oneshot::Sender<Result<Vec<u8>, Error>>)>(1024);
@@ -45,7 +47,7 @@ where
                 Ok(msg) => {
                     if let Err(err) = opts.validate::<I, E>(&msg) {
                         let err: MsgResult<O, E> = Err(err);
-                        let res = D::encode(err).map_err(|_| Error::Encode);
+                        let res = D::encode(err).map_err(|e| Error::Encode(e.to_string()));
                         let _ = sender.send(res);
                         continue;
                     }
@@ -53,7 +55,7 @@ where
                     let stop_msg = matches!(msg, Message::<I>::Stop);
 
                     let res = inner_handle.send(msg).await;
-                    match D::encode(res).map_err(|_| Error::Encode) {
+                    match D::encode(res).map_err(|e| Error::Encode(e.to_string())) {
                         Ok(enc) => {
                             if let Err(_) = sender.send(Ok(enc)) {
                                 tracing::warn!("untyped: failed to send reply");
@@ -73,15 +75,19 @@ where
                 }
                 Err(err) => {
                     tracing::error!("untyped: failed to decode incoming message: {err}");
-                    let _ = sender.send(Err(Error::Decode)).inspect_err(|_| {
-                        tracing::warn!("untyped: failed to send reply");
-                    });
+                    let _ = sender
+                        .send(Err(Error::Decode(err.to_string())))
+                        .inspect_err(|_| {
+                            tracing::warn!("untyped: failed to send reply");
+                        });
                 }
             }
         }
     });
 
-    conf_receiver.await.map_err(|_| Error::Spawn)??;
+    conf_receiver
+        .await
+        .map_err(|e| Error::Spawn(e.to_string()))??;
 
     Ok((
         local_handle,
@@ -120,8 +126,8 @@ impl HandleOpts {
     ///
     pub fn validate<I, E>(&self, msg: &Message<I>) -> Result<(), MsgError<E>> {
         match msg {
-            Message::TaskMut(_) if !self.allow_mut => Err(MsgError::Mut),
-            Message::Stop if !self.allow_stop => Err(MsgError::Stop),
+            Message::TaskMut(_) if !self.allow_mut => Err(MsgError::NotAllowed),
+            Message::Stop if !self.allow_stop => Err(MsgError::NotAllowed),
             _ => Ok(()),
         }
     }
@@ -159,12 +165,12 @@ impl UntypedHandle {
             .map_err(|e| {
                 tracing::error!("untyped send: {e}");
 
-                Error::Send
+                Error::Send(e.to_string())
             })?;
 
         receiver.await.map_err(|e| {
             tracing::error!("untyped recv: {e}");
-            Error::Recv
+            Error::Recv(e.to_string())
         })?
     }
 
@@ -191,26 +197,41 @@ impl UntypedHandle {
 /// errors when spawning an actor or messaging through an [`UntypedHandle`]
 ///
 #[allow(missing_docs)]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("failed to spawn local actor")]
-    Local(#[from] local::Error),
+    // #[error("failed to spawn local actor")]
+    Local(local::Error),
 
-    #[error("failed to spawn dencoder actor")]
-    Spawn,
+    // #[error("failed to spawn dencoder actor")]
+    Spawn(String),
 
-    #[error("failed to send message to dencoder actor")]
-    Send,
+    // #[error("failed to send message to dencoder actor")]
+    Send(String),
 
-    #[error("failed to receive reply from dencoder actor")]
-    Recv,
+    // #[error("failed to receive reply from dencoder actor")]
+    Recv(String),
 
-    #[error("failed to decode message")]
-    Decode,
+    // #[error("failed to decode message")]
+    Decode(String),
 
-    #[error("failed to encode message")]
-    Encode,
+    // #[error("failed to encode message")]
+    Encode(String),
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Local(ctx) => write!(f, "failed to spawn local actor: {ctx}"),
+            Error::Spawn(ctx) => write!(f, "failed to spawn actor: {ctx}"),
+            Error::Send(ctx) => write!(f, "failed to send message: {ctx}"),
+            Error::Recv(ctx) => write!(f, "failed to receive message: {ctx}"),
+            Error::Decode(ctx) => write!(f, "failed to decode message: {ctx}"),
+            Error::Encode(ctx) => write!(f, "failed to encode message: {ctx}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {
@@ -301,6 +322,6 @@ mod tests {
             .unwrap()
             .unwrap_err();
 
-        assert!(matches!(res, MsgError::Mut));
+        assert!(matches!(res, MsgError::NotAllowed));
     }
 }

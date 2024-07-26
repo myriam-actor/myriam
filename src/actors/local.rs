@@ -2,6 +2,8 @@
 //! local actors, with no net dependencies
 //!
 
+use std::fmt::Display;
+
 use tokio::sync::{mpsc, oneshot};
 
 use crate::messaging::{Message, MsgError, MsgResult, Reply};
@@ -57,7 +59,9 @@ where
     });
 
     // first error is oneshot sender being dropped prematurely
-    conf_receiver.await.map_err(|_| Error::Spawn)??;
+    conf_receiver
+        .await
+        .map_err(|e| Error::Spawn(e.to_string()))??;
 
     Ok(LocalHandle { sender })
 }
@@ -86,9 +90,9 @@ impl<I, O, E> LocalHandle<I, O, E> {
         self.sender
             .send((msg, sender))
             .await
-            .map_err(|_| MsgError::Send)?;
+            .map_err(|e| MsgError::Send(e.to_string()))?;
 
-        receiver.await.map_err(|_| MsgError::Recv)?
+        receiver.await.map_err(|e| MsgError::Recv(e.to_string()))?
     }
 
     ///
@@ -101,9 +105,11 @@ impl<I, O, E> LocalHandle<I, O, E> {
 
         self.sender
             .blocking_send((msg, sender))
-            .map_err(|_| MsgError::Send)?;
+            .map_err(|e| MsgError::Send(e.to_string()))?;
 
-        receiver.blocking_recv().map_err(|_| MsgError::Recv)?
+        receiver
+            .blocking_recv()
+            .map_err(|e| MsgError::Recv(e.to_string()))?
     }
 }
 
@@ -111,11 +117,20 @@ impl<I, O, E> LocalHandle<I, O, E> {
 /// Errors when spawning an actor
 ///
 #[allow(missing_docs)]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("failed to spawn this actor")]
-    Spawn,
+    Spawn(String),
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Spawn(ctx) => write!(f, "failed to spawn actor: {ctx}"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {

@@ -2,6 +2,8 @@
 //! models for local and remote messaging
 //!
 
+use std::fmt::Display;
+
 #[cfg(feature = "remote")]
 use serde::{Deserialize, Serialize};
 
@@ -46,21 +48,27 @@ pub type MsgResult<Output, Error> = Result<Reply<Output>, MsgError<Error>>;
 /// errors that could arise from actor messaging
 ///
 #[allow(missing_docs)]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 #[cfg_attr(feature = "remote", derive(Serialize, Deserialize))]
 pub enum MsgError<Error> {
-    #[error("failed to send message through channel")]
-    Send,
-
-    #[error("failed to receive response from channel")]
-    Recv,
-
-    #[error("message processed but task failed")]
-    Task(#[from] Error),
-
-    #[error("mutation required but not allowed")]
-    Mut,
-
-    #[error("stop request not allowed")]
-    Stop,
+    Send(String),
+    Recv(String),
+    Task(Error),
+    NotAllowed,
 }
+
+impl<E> Display for MsgError<E>
+where
+    E: Display,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MsgError::Send(ctx) => write!(f, "failed to send message: {ctx}"),
+            MsgError::Recv(ctx) => write!(f, "failed to receive message: {ctx}"),
+            MsgError::Task(err) => write!(f, "task failed: {err}"),
+            MsgError::NotAllowed => write!(f, "message not allowed"),
+        }
+    }
+}
+
+impl<E> std::error::Error for MsgError<E> where E: Display + core::fmt::Debug {}

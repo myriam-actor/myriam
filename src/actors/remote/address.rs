@@ -126,14 +126,22 @@ impl Display for ActorAddress {
 /// Errors when creating a new address
 ///
 #[allow(missing_docs)]
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug)]
 pub enum Error {
-    #[error("malformed actor address")]
     Malformed,
-
-    #[error("failed to generate peer ID")]
     Id,
 }
+
+impl Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::Malformed => write!(f, "malformed actor address"),
+            Error::Id => write!(f, "failed to generate peer ID"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
 
 #[cfg(test)]
 mod tests {

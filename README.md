@@ -4,6 +4,7 @@ Local and remote actor model implementation with an API heavily inspired (but no
 
 ```rust
 use std::time::Duration;
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 use myriam::{
@@ -23,9 +24,14 @@ struct Mult {
     pub a: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
-#[error("uh oh")]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SomeError;
+
+impl Display for SomeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "uh oh")
+    }
+}
 
 impl Actor<u32, u32, SomeError> for Mult {
     async fn handler(&self, input: u32) -> Result<u32, SomeError> {
@@ -40,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // bag of bytes and have to be {de}serialized
     let (local_handle, untyped_handle)
         = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 }).await?;
-    
+
     // create router with a TOR netlayer
     let router_handle = Router::with_netlayer(TcpNetLayer::new(), Some(RouterOpts::default())).await?;
 

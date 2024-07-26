@@ -14,11 +14,11 @@ pub struct BincodeDencoder;
 
 impl Dencoder for BincodeDencoder {
     fn encode<T: Serialize>(value: T) -> Result<Vec<u8>, super::Error> {
-        bincode::serialize(&value).map_err(|_| super::Error::Encode)
+        bincode::serialize(&value).map_err(|e| super::Error::Encode(e.to_string()))
     }
 
     fn decode<U: DeserializeOwned>(value: Vec<u8>) -> Result<U, super::Error> {
-        bincode::deserialize(&value).map_err(|_| super::Error::Decode)
+        bincode::deserialize(&value).map_err(|e| super::Error::Decode(e.to_string()))
     }
 }
 
