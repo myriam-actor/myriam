@@ -1,6 +1,6 @@
 # myriam-rs
 
-Local and remote actor model implementation with an API heavily inspired (but not necessarily equivalent) in [Goblins](https://gitlab.com/spritely/guile-goblins).
+Local and remote actor model implementation with an API heavily inspired in (but not necessarily equivalent to) [Goblins](https://gitlab.com/spritely/guile-goblins).
 
 ```rust
 use std::time::Duration;
