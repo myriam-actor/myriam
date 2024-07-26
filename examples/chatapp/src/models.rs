@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use myriam::actors::remote::address::ActorAddress;
 use serde::{Deserialize, Serialize};
@@ -91,20 +91,25 @@ impl FromStr for Command {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, thiserror::Error)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum AppError {
-    #[error("missing required arg: {0}")]
     MissingArg(String),
-
-    #[error("invalid command: {0}")]
     InvalidCmd(String),
-
-    #[error("failed to message peer")]
     PeerMsg,
-
-    #[error("actor is not ready to handle this message")]
     NotReady,
-
-    #[error("message is currently forbidden by this actor")]
     NotAllowed,
 }
+
+impl Display for AppError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AppError::MissingArg(arg) => write!(f, "missing required arg: {arg}"),
+            AppError::InvalidCmd(cmd) => write!(f, "invalid command: {cmd}"),
+            AppError::PeerMsg => write!(f, "failed to send message to peer"),
+            AppError::NotReady => write!(f, "actor is not ready to handle this message"),
+            AppError::NotAllowed => write!(f, "message is currently forbidden by this actor"),
+        }
+    }
+}
+
+impl std::error::Error for AppError {}
