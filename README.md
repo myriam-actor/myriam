@@ -2,7 +2,7 @@
 
 Local and remote actor model implementation with an API heavily inspired in (but not necessarily equivalent to) [Goblins](https://gitlab.com/spritely/guile-goblins).
 
-```rust
+```rust, no_run
 use std::time::Duration;
 use std::fmt::Display;
 
@@ -13,7 +13,7 @@ use myriam::{
         remote::{
             self,
             dencoder::bincode::BincodeDencoder,
-            netlayer::tcp_layer::TcpNetLayer,
+            netlayer::tor_layer::TorNetLayer,
             router::{RemoteHandle, Router, RouterOpts},
         },
     },
@@ -48,15 +48,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 }).await?;
 
     // create router with a TOR netlayer
-    let router_handle = Router::with_netlayer(TcpNetLayer::new(), Some(RouterOpts::default())).await?;
+    let layer =
+        TorNetLayer::new_for_service("127.0.0.1.9050", "127.0.0.1:8080", "/tmp/myriam/test")
+            .await?;
+
+
+    let router_handle = Router::with_netlayer(layer, Some(RouterOpts::default())).await?;
 
     // routers handle external access to several attached actors
     // we can think of this exposed actor as a capability
     // "tor:0139aa9b4d523e1da515ce21a818e579acd005fbd0aea62ef094ac1b845f99e7@someaddress.onion"
     let address = router_handle.attach(untyped_handle).await?;
 
+    let new_layer =
+        TorNetLayer::new_for_service("127.0.0.1.9050", "127.0.0.1:8080", "/tmp/myriam/test")
+            .await?;
+
     let remote_handle
-        = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(&address, TcpNetLayer::new());
+        = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorNetLayer>::new(&address, new_layer);
     //                     type handle once ^
 
     // use RemoteHandle just like a LocalHandle
