@@ -2,86 +2,46 @@
 
 Local and remote actor model implementation with an API heavily inspired in (but not necessarily equivalent to) [Goblins](https://gitlab.com/spritely/guile-goblins).
 
-```rust, no_run
-use std::time::Duration;
-use std::fmt::Display;
+```rust
+// LocalHandle allows for local, type-safe communication
+// UntypedHandle tries to do the same, but requests and responses are
+// bag of bytes and have to be {de}serialized
+let (local_handle, untyped_handle)
+    = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 }).await?;
 
-use serde::{Deserialize, Serialize};
-use myriam::{
-    actors::{
-        Actor,
-        remote::{
-            self,
-            dencoder::bincode::BincodeDencoder,
-            netlayer::tor_layer::TorNetLayer,
-            router::{RemoteHandle, Router, RouterOpts},
-        },
-    },
-    messaging::{Message, Reply},
-};
+// create router with a TOR netlayer
+let layer =
+    TorNetLayer::new_for_service("127.0.0.1.9050", "127.0.0.1:8080", "/tmp/myriam/foo")
+        .await?;
 
-struct Mult {
-    pub a: u32,
-}
+let router_handle = Router::with_netlayer(layer, Some(RouterOpts::default())).await?;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct SomeError;
+// routers handle external access to several attached actors
+// we can think of this exposed actor as a capability
+// "tor:0139aa9b4d523e1da515ce21a818e579acd005fbd0aea62ef094ac1b845f99e7@someaddress.onion"
+let address = router_handle.attach(untyped_handle).await?;
 
-impl Display for SomeError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "uh oh")
-    }
-}
+let new_layer =
+    TorNetLayer::new_for_service("127.0.0.1.9050", "127.0.0.1:8081", "/tmp/myriam/bar")
+        .await?;
 
-impl Actor<u32, u32, SomeError> for Mult {
-    async fn handler(&self, input: u32) -> Result<u32, SomeError> {
-        Ok(input * self.a)
-    }
-}
+let remote_handle
+    = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorNetLayer>::new(&address, new_layer);
+//                     type handle once ^
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // LocalHandle allows for local, type-safe communication
-    // UntypedHandle tries to do the same, but requests and responses are
-    // bag of bytes and have to be {de}serialized
-    let (local_handle, untyped_handle)
-        = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 }).await?;
+// use RemoteHandle just like a LocalHandle
+let res = remote_handle.send(Message::Task(42)).await?;
 
-    // create router with a TOR netlayer
-    let layer =
-        TorNetLayer::new_for_service("127.0.0.1.9050", "127.0.0.1:8080", "/tmp/myriam/test")
-            .await?;
+// capabilities can be revoked anytime
+router_handle.revoke(&address).await?;
 
+tokio::time::sleep(Duration::from_millis(100));
 
-    let router_handle = Router::with_netlayer(layer, Some(RouterOpts::default())).await?;
-
-    // routers handle external access to several attached actors
-    // we can think of this exposed actor as a capability
-    // "tor:0139aa9b4d523e1da515ce21a818e579acd005fbd0aea62ef094ac1b845f99e7@someaddress.onion"
-    let address = router_handle.attach(untyped_handle).await?;
-
-    let new_layer =
-        TorNetLayer::new_for_service("127.0.0.1.9050", "127.0.0.1:8080", "/tmp/myriam/test")
-            .await?;
-
-    let remote_handle
-        = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorNetLayer>::new(&address, new_layer);
-    //                     type handle once ^
-
-    // use RemoteHandle just like a LocalHandle
-    let res = remote_handle.send(Message::Task(42)).await?;
-
-    // capabilities can be revoked anytime
-    router_handle.revoke(&address).await?;
-
-    tokio::time::sleep(Duration::from_millis(100));
-
-    // ...and thus we can't invoke this one anymore
-    remote_handle.send(Message::Ping).await.unwrap_err();
-
-    Ok(())
-}
+// ...and thus we can't invoke this one anymore
+remote_handle.send(Message::Ping).await.unwrap_err();
 ```
+
+Check out the [repo examples](https://codeberg.org/arisunz/myriam-rs/src/branch/main/examples) for a more comprehensive demo.
 
 ## features
 
