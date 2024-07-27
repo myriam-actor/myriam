@@ -7,7 +7,7 @@ description = "Actor model implementation for local and remote actors."
 homepage = "https://codeberg.org/arisunz/myriam-rs"
 repository = "https://codeberg.org/arisunz/myriam-rs"
 categories = ["concurrency", "network-programming", "asynchronous"]
-keywords = ["actor", "actors", "distributed", "libp2p"]
+keywords = ["actor", "actors", "distributed"]
 authors = ["Ariela Wenner <arisunz at disroot dot org>"]
 
 [features]
