@@ -4,7 +4,7 @@
 
 use std::{fmt::Display, str::FromStr};
 
-use rand::Rng;
+use rand::{Rng, RngCore};
 use serde::{Deserialize, Serialize};
 
 use super::netlayer::NetLayer;
@@ -17,7 +17,7 @@ use super::netlayer::NetLayer;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActorAddress {
     proto_id: String,
-    peer_id: String,
+    peer_id: PeerId,
     host: String,
 }
 
@@ -38,12 +38,10 @@ impl ActorAddress {
             Error::Id
         })?;
 
-        let peer_id = hex::encode(bytes);
-
         Ok(Self {
             proto_id: proto_id.to_owned(),
             host: host.to_owned(),
-            peer_id,
+            peer_id: PeerId::new()?,
         })
     }
 
@@ -58,10 +56,12 @@ impl ActorAddress {
             return Err(Error::Malformed);
         }
 
+        let peer_id = PeerId::try_parse(&value[peer_sep + 1..host_sep])?;
+
         Ok(Self {
             proto_id: value[0..peer_sep].to_owned(),
-            peer_id: value[peer_sep + 1..host_sep].to_owned(),
             host: value[host_sep + 1..value.len()].to_owned(),
+            peer_id,
         })
     }
 
@@ -75,7 +75,7 @@ impl ActorAddress {
     ///
     /// this actor's peer ID in the router
     ///
-    pub fn peer_id(&self) -> &str {
+    pub fn peer_id(&self) -> &PeerId {
         &self.peer_id
     }
 
@@ -123,6 +123,57 @@ impl Display for ActorAddress {
 }
 
 ///
+/// wrapper over a bag of bytes, acting as a unique identifier
+/// inside a [`Router`]
+///
+#[derive(Debug, Clone, Eq, PartialEq, Hash, Serialize, Deserialize)]
+pub struct PeerId(Vec<u8>);
+
+impl PeerId {
+    /// generate a new random PeerId
+    pub fn new() -> Result<Self, Error> {
+        let mut rng = rand::thread_rng();
+
+        let mut buffer = [0u8; 32];
+        rng.fill_bytes(&mut buffer);
+
+        Ok(Self(buffer.to_vec()))
+    }
+
+    /// generate a new PeerId using `bytes`
+    pub fn new_from_bytes(bytes: &[u8]) -> Self {
+        Self(bytes.to_vec())
+    }
+
+    ///
+    /// try to parse a string as a PeerId
+    ///
+    /// fails if `value` is not an hex-encoded string
+    ///
+    pub fn try_parse(value: &str) -> Result<Self, Error> {
+        Ok(Self::new_from_bytes(
+            &hex::decode(value).map_err(|_| Error::Id)?,
+        ))
+    }
+
+    /// returns a reference to the bytes making up this PeerId
+    pub fn bytes(&self) -> &[u8] {
+        &self.0
+    }
+
+    /// returns the length of the byte buffer making up this PeerId
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+}
+
+impl Display for PeerId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", hex::encode(&self.0))
+    }
+}
+
+///
 /// Errors when creating a new address
 ///
 #[allow(missing_docs)]
@@ -155,8 +206,8 @@ mod tests {
 
         assert_eq!("tcp", addr.proto_id());
         assert_eq!("127.0.0.1", addr.host());
-        assert_eq!(64, addr.peer_id().len());
-        assert_eq!(32, hex::decode(addr.peer_id()).unwrap().len());
+        assert_eq!(32, addr.peer_id().len());
+        assert_eq!(64, addr.peer_id().to_string().len());
     }
 
     #[test]
@@ -166,7 +217,7 @@ mod tests {
         let addr = ActorAddress::try_parse(addr_str.into()).unwrap();
 
         assert_eq!("tcp", addr.proto_id());
-        assert_eq!("c0ffee", addr.peer_id());
+        assert_eq!("c0ffee", addr.peer_id().to_string());
         assert_eq!("example.com", addr.host());
     }
 
@@ -177,7 +228,7 @@ mod tests {
         let addr = ActorAddress::try_parse(addr_str.into()).unwrap();
 
         assert_eq!("tcp", addr.proto_id());
-        assert_eq!("c0ffee", addr.peer_id());
+        assert_eq!("c0ffee", addr.peer_id().to_string());
         assert_eq!("example.com:8037", addr.host());
     }
 

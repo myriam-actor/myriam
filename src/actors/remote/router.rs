@@ -38,7 +38,7 @@ use crate::{
 };
 
 use super::{
-    address::{self, ActorAddress},
+    address::{self, ActorAddress, PeerId},
     dencoder::{self, Dencoder},
     netlayer::{AsyncMsgStream, NetLayer},
 };
@@ -75,7 +75,7 @@ impl Router {
 
         let host_address_inner = host_address.clone();
 
-        let peers: HashMap<String, UntypedHandle> = HashMap::new();
+        let peers: HashMap<PeerId, UntypedHandle> = HashMap::new();
 
         let (sender, mut receiver) =
             mpsc::channel::<(RouterMessage, oneshot::Sender<Result<RouterReply, Error>>)>(1024);
@@ -154,7 +154,7 @@ impl Router {
     }
 }
 
-async fn try_read_id<S>(stream: &mut S) -> Result<String, Error>
+async fn try_read_id<S>(stream: &mut S) -> Result<PeerId, Error>
 where
     S: AsyncReadExt + Unpin,
 {
@@ -169,7 +169,7 @@ where
         Error::Recv(e.to_string())
     })?;
 
-    Ok(hex::encode(id_buffer))
+    Ok(PeerId::new_from_bytes(&id_buffer))
 }
 
 async fn try_handle_message<S>(
@@ -405,19 +405,15 @@ where
                 Error::Connect(err.to_string())
             })?;
 
-        let id = hex::decode(self.address.peer_id()).map_err(|err| {
-            tracing::error!("remote handle: invalid id - {err}");
-            Error::Connect(err.to_string())
-        })?;
-
-        let id_len = id.len() as u16;
+        let id = self.addr().peer_id();
+        let id_len = self.addr().peer_id().len() as u16;
 
         stream.write_u16(id_len).await.map_err(|err| {
             tracing::error!("remote handle: failed to send peer ID size - {err}");
             Error::Send(err.to_string())
         })?;
 
-        stream.write_all(&id).await.map_err(|err| {
+        stream.write_all(id.bytes()).await.map_err(|err| {
             tracing::error!("remote handle: failed to send peer ID - {err}");
             Error::Send(err.to_string())
         })?;
