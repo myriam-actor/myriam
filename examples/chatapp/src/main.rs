@@ -19,9 +19,9 @@ async fn main() -> Result<()> {
     install_hooks()?;
 
     let mut args = std::env::args().skip(1).take(2);
-    let name = args
+    let data_dir = args
         .next()
-        .ok_or(AppError::MissingArg("name".to_string()))?;
+        .ok_or(AppError::MissingArg("Tor data dir".to_string()))?;
 
     let port: u16 = args
         .next()
@@ -29,19 +29,15 @@ async fn main() -> Result<()> {
         .parse()?;
 
     let router = Router::with_netlayer(
-        TorNetLayer::new_for_service(
-            "127.0.0.1:9050",
-            &format!("127.0.0.1:{port}"),
-            &format!("/tmp/chatapp/{name}"),
-        )
-        .await?,
+        TorNetLayer::new_for_service("127.0.0.1:9050", &format!("127.0.0.1:{port}"), &data_dir)
+            .await?,
         None,
     )
     .await?;
 
     let (tui_sender, tui_receiver) = mpsc::channel::<Report>(1024);
 
-    let messenger = Messenger::new(name, tui_sender);
+    let messenger = Messenger::new(data_dir, tui_sender);
     let (messenger_local, mut messenger_untyped) =
         remote::spawn_untyped::<_, _, _, BincodeDencoder>(messenger).await?;
 
