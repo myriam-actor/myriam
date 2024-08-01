@@ -46,6 +46,22 @@ impl ActorAddress {
     }
 
     ///
+    /// create a new address using this host, [`PeerID`] and [`NetLayer`] param
+    ///
+    pub fn new_with_peer_id<N>(host: &str, peer_id: PeerId) -> Self
+    where
+        N: NetLayer,
+    {
+        let proto_id = N::name();
+
+        Self {
+            proto_id: proto_id.to_owned(),
+            host: host.to_owned(),
+            peer_id,
+        }
+    }
+
+    ///
     /// try to parse an address from the given string
     ///
     pub fn try_parse(value: &str) -> Result<Self, Error> {

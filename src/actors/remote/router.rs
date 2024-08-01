@@ -94,11 +94,16 @@ impl Router {
                                 let _ = sender.send(Ok(RouterReply::Accepted));
                                 return;
                             },
-                            RouterMessage::Attach(handle) => {
-                                let addr = if let Ok(addr) = ActorAddress::new::<N>(&host_address_inner) {
-                                    addr
-                                } else {
-                                    continue;
+                            RouterMessage::Attach { handle, peer_id } => {
+                                let addr = match peer_id {
+                                    Some(id) => ActorAddress::new_with_peer_id::<N>(&host_address_inner, id),
+                                    None => match ActorAddress::new::<N>(&host_address_inner) {
+                                        Ok(addr) => addr,
+                                        Err(err) => {
+                                            tracing::error!("router: attach - {err}");
+                                            continue;
+                                        }
+                                    },
                                 };
 
                                 peers.write().await.insert(addr.peer_id().to_owned(), handle);
@@ -279,9 +284,32 @@ impl RouterHandle {
     /// this address can be seen as a capability, and revoked at any time. see [`Self::revoke()`].
     ///
     pub async fn attach(&self, handle: UntypedHandle) -> Result<ActorAddress, Error> {
+        self.attach_handle(handle, None).await
+    }
+
+    ///
+    /// register an actor with a given PeerId, getting a new address for it.
+    ///
+    /// this address can be seen as a capability, and revoked at any time. see [`Self::revoke()`].
+    ///
+    /// usefull for persisting actor identities.
+    ///
+    pub async fn attach_with_id(
+        &self,
+        handle: UntypedHandle,
+        peer_id: PeerId,
+    ) -> Result<ActorAddress, Error> {
+        self.attach_handle(handle, Some(peer_id)).await
+    }
+
+    async fn attach_handle(
+        &self,
+        handle: UntypedHandle,
+        peer_id: Option<PeerId>,
+    ) -> Result<ActorAddress, Error> {
         let (sender, receiver) = oneshot::channel();
         self.sender
-            .send((RouterMessage::Attach(handle), sender))
+            .send((RouterMessage::Attach { handle, peer_id }, sender))
             .await
             .map_err(|e| {
                 tracing::error!("router: {e}");
@@ -457,7 +485,10 @@ where
 #[derive(Debug)]
 enum RouterMessage {
     Stop,
-    Attach(UntypedHandle),
+    Attach {
+        handle: UntypedHandle,
+        peer_id: Option<PeerId>,
+    },
     Revoke(ActorAddress),
 }
 
@@ -501,6 +532,7 @@ mod tests {
         actors::{
             remote::{
                 self,
+                address::PeerId,
                 dencoder::bincode::BincodeDencoder,
                 netlayer::tcp_layer::TcpNetLayer,
                 router::{RemoteHandle, Router, RouterOpts},
@@ -521,6 +553,33 @@ mod tests {
             .unwrap();
 
         let addr = router.attach(handle).await.unwrap();
+
+        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
+            &addr,
+            TcpNetLayer::new(),
+        );
+
+        let res = remote.send(Message::Task(5)).await.unwrap();
+        assert!(matches!(res, Ok(Reply::Task(15))));
+    }
+
+    #[tokio::test]
+    async fn spawn_with_id() {
+        let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+            .await
+            .unwrap();
+
+        let router = Router::with_netlayer(TcpNetLayer::new(), Some(RouterOpts::default()))
+            .await
+            .unwrap();
+
+        let peer_id = PeerId::new().unwrap();
+        let addr = router
+            .attach_with_id(handle, peer_id.clone())
+            .await
+            .unwrap();
+
+        assert_eq!(peer_id, *addr.peer_id());
 
         let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
             &addr,
