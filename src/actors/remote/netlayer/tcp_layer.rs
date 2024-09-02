@@ -31,6 +31,12 @@ impl TcpNetLayer {
     }
 }
 
+impl Default for TcpNetLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetLayer for TcpNetLayer {
     type Error = TcpError;
 
@@ -39,11 +45,11 @@ impl NetLayer for TcpNetLayer {
     }
 
     async fn connect(&self, addr: &str) -> Result<impl AsyncMsgStream, Self::Error> {
-        Ok(TcpStream::connect(addr).await.map_err(|e| {
+        TcpStream::connect(addr).await.map_err(|e| {
             tracing::error!("connect error {e}");
 
             TcpError::Connect(e.to_string())
-        })?)
+        })
     }
 
     async fn init(&mut self) -> Result<(), Self::Error> {

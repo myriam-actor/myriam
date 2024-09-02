@@ -316,10 +316,12 @@ impl RouterHandle {
                 Error::Send(e.to_string())
             })?;
 
-        match receiver.await.map_err(|e| {
+        let reply = receiver.await.map_err(|e| {
             tracing::error!("router: {e}");
             Error::Recv(e.to_string())
-        })?? {
+        })??;
+
+        match reply {
             RouterReply::Accepted => panic!("expected Address variant"),
             RouterReply::Address(a) => Ok(a),
         }
@@ -339,10 +341,12 @@ impl RouterHandle {
                 Error::Send(e.to_string())
             })?;
 
-        match receiver.await.map_err(|e| {
+        let reply = receiver.await.map_err(|e| {
             tracing::error!("router: {e}");
             Error::Recv(e.to_string())
-        })?? {
+        })??;
+
+        match reply {
             RouterReply::Accepted => panic!("expected Address variant"),
             RouterReply::Address(a) => Ok(a),
         }
@@ -362,10 +366,12 @@ impl RouterHandle {
                 Error::Send(e.to_string())
             })?;
 
-        match receiver.await.map_err(|e| {
+        let reply = receiver.await.map_err(|e| {
             tracing::error!("router: {e}");
             Error::Recv(e.to_string())
-        })?? {
+        })??;
+
+        match reply {
             RouterReply::Accepted => Ok(()),
             RouterReply::Address(_) => panic!("expected Accepted variant"),
         }
@@ -410,10 +416,10 @@ where
         Self {
             address: address.to_owned(),
             netlayer,
-            _ipd: PhantomData::default(),
-            _opd: PhantomData::default(),
-            _epd: PhantomData::default(),
-            _dpd: PhantomData::default(),
+            _ipd: PhantomData,
+            _opd: PhantomData,
+            _epd: PhantomData,
+            _dpd: PhantomData,
         }
     }
 
@@ -446,7 +452,7 @@ where
             Error::Send(err.to_string())
         })?;
 
-        let bytes = D::encode(msg).map_err(|e| Error::Serialize(e))?;
+        let bytes = D::encode(msg).map_err(Error::Serialize)?;
         stream.write_u32(bytes.len() as u32).await.map_err(|err| {
             tracing::error!("remote handle: failed to send message size - {err}");
             Error::Send(err.to_string())
@@ -473,7 +479,7 @@ where
             Error::Recv(err.to_string())
         })?;
 
-        Ok(D::decode(res_buffer).map_err(|e| Error::Serialize(e))?)
+        D::decode(res_buffer).map_err(Error::Serialize)
     }
 
     /// [`ActorAddress`] pointed to by this handle

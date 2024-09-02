@@ -67,7 +67,7 @@ where
 }
 
 fn try_send_reply<O, E>(sender: oneshot::Sender<MsgResult<O, E>>, reply: MsgResult<O, E>) {
-    if let Err(_) = sender.send(reply) {
+    if sender.send(reply).is_err() {
         tracing::error!("local: failed to send reply");
     }
 }
@@ -76,6 +76,7 @@ fn try_send_reply<O, E>(sender: oneshot::Sender<MsgResult<O, E>>, reply: MsgResu
 /// handle for a locally spawned actor
 ///
 #[derive(Debug, Clone)]
+#[allow(clippy::type_complexity)]
 pub struct LocalHandle<I, O, E> {
     sender: mpsc::Sender<(Message<I>, oneshot::Sender<MsgResult<O, E>>)>,
 }

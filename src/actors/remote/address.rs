@@ -174,6 +174,11 @@ impl PeerId {
     pub fn len(&self) -> usize {
         self.0.len()
     }
+
+    /// returns true if the PeerId's byte buffer is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 impl Display for PeerId {
@@ -223,7 +228,7 @@ mod tests {
     fn can_parse() {
         let addr_str = "tcp:c0ffee@example.com";
 
-        let addr = ActorAddress::try_parse(addr_str.into()).unwrap();
+        let addr = ActorAddress::try_parse(addr_str).unwrap();
 
         assert_eq!("tcp", addr.proto_id());
         assert_eq!("c0ffee", addr.peer_id().to_string());
@@ -234,7 +239,7 @@ mod tests {
     fn can_parse_host_and_port() {
         let addr_str = "tcp:c0ffee@example.com:8037";
 
-        let addr = ActorAddress::try_parse(addr_str.into()).unwrap();
+        let addr = ActorAddress::try_parse(addr_str).unwrap();
 
         assert_eq!("tcp", addr.proto_id());
         assert_eq!("c0ffee", addr.peer_id().to_string());
@@ -243,11 +248,11 @@ mod tests {
 
     #[test]
     fn empty_address_fails() {
-        ActorAddress::try_parse(":@".into()).unwrap_err();
+        ActorAddress::try_parse(":@").unwrap_err();
     }
 
     #[test]
     fn malformed_address_fails() {
-        ActorAddress::try_parse("jkfd@fdk:asdj".into()).unwrap_err();
+        ActorAddress::try_parse("jkfd@fdk:asdj").unwrap_err();
     }
 }

@@ -34,7 +34,7 @@ where
     E: Clone + Send + Serialize + 'static,
     D: Dencoder,
 {
-    let local_handle = local::spawn(actor).await.map_err(|e| Error::Local(e))?;
+    let local_handle = local::spawn(actor).await.map_err(Error::Local)?;
     let inner_handle = local_handle.clone();
     let (sender, mut receiver) =
         mpsc::channel::<(Vec<u8>, HandleOpts, oneshot::Sender<Result<Vec<u8>, Error>>)>(1024);
@@ -57,7 +57,7 @@ where
                     let res = inner_handle.send(msg).await;
                     match D::encode(res).map_err(|e| Error::Encode(e.to_string())) {
                         Ok(enc) => {
-                            if let Err(_) = sender.send(Ok(enc)) {
+                            if sender.send(Ok(enc)).is_err() {
                                 tracing::warn!("untyped: failed to send reply");
                             }
 
@@ -143,10 +143,17 @@ impl HandleOpts {
     }
 }
 
+impl Default for HandleOpts {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 ///
 /// untyped handle for remote messaging, when types aren't available.
 ///
 #[derive(Debug, Clone)]
+#[allow(clippy::type_complexity)]
 pub struct UntypedHandle {
     sender: mpsc::Sender<(Vec<u8>, HandleOpts, oneshot::Sender<Result<Vec<u8>, Error>>)>,
     opts: HandleOpts,
