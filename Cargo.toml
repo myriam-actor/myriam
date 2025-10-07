@@ -15,13 +15,13 @@ authors = [
 
 [features]
 default = ["remote", "tcp", "tor"]
-remote = ["dep:serde", "dep:rand", "dep:hex"]
+remote = ["dep:serde", "dep:rand", "dep:base32"]
 tcp = ["remote"]
 tor = ["dep:socks5-impl", "remote"]
 
 [dependencies]
 bincode = "1.3.3"
-hex = { version = "0.4.3", optional = true }
+base32 = { version = "0.5.1", optional = true }
 rand = { version = "0.8.5", optional = true }
 serde = { version = "1.0.203", features = ["derive"], optional = true }
 socks5-impl = { version = "0.5.14", optional = true }

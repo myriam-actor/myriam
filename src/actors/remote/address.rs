@@ -157,11 +157,12 @@ impl PeerId {
     ///
     /// try to parse a string as a PeerId
     ///
-    /// fails if `value` is not an hex-encoded string
+    /// fails if `value` is not a (lower case) base32-encoded string
     ///
     pub fn try_parse(value: &str) -> Result<Self, Error> {
         Ok(Self::new_from_bytes(
-            &hex::decode(value).map_err(|_| Error::Id)?,
+            &base32::decode(base32::Alphabet::Rfc4648Lower { padding: false }, value)
+                .ok_or(Error::Id)?,
         ))
     }
 
@@ -183,7 +184,11 @@ impl PeerId {
 
 impl Display for PeerId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
+        write!(
+            f,
+            "{}",
+            base32::encode(base32::Alphabet::Rfc4648Lower { padding: false }, &self.0)
+        )
     }
 }
 
@@ -221,28 +226,28 @@ mod tests {
         assert_eq!("tcp", addr.proto_id());
         assert_eq!("127.0.0.1", addr.host());
         assert_eq!(32, addr.peer_id().len());
-        assert_eq!(64, addr.peer_id().to_string().len());
+        assert_eq!(52, addr.peer_id().to_string().len());
     }
 
     #[test]
     fn can_parse() {
-        let addr_str = "tcp:c0ffee@example.com";
+        let addr_str = "tcp:somethingelse@example.com";
 
         let addr = ActorAddress::try_parse(addr_str).unwrap();
 
         assert_eq!("tcp", addr.proto_id());
-        assert_eq!("c0ffee", addr.peer_id().to_string());
+        assert_eq!("somethingelse", addr.peer_id().to_string());
         assert_eq!("example.com", addr.host());
     }
 
     #[test]
     fn can_parse_host_and_port() {
-        let addr_str = "tcp:c0ffee@example.com:8037";
+        let addr_str = "tcp:anotherone@example.com:8037";
 
         let addr = ActorAddress::try_parse(addr_str).unwrap();
 
         assert_eq!("tcp", addr.proto_id());
-        assert_eq!("c0ffee", addr.peer_id().to_string());
+        assert_eq!("anotherone", addr.peer_id().to_string());
         assert_eq!("example.com:8037", addr.host());
     }
 
