@@ -4,11 +4,14 @@ version = "0.1.3"
 edition = "2021"
 license = "Apache-2.0"
 description = "Actor model implementation for local and remote actors."
-homepage = "https://codeberg.org/arisunz/myriam-rs"
-repository = "https://codeberg.org/arisunz/myriam-rs"
+homepage = "https://github.com/arirei/myriam"
+repository = "https://github.com/arirei/myriam"
 categories = ["concurrency", "network-programming", "asynchronous"]
 keywords = ["actor", "actors", "distributed"]
-authors = ["Ariela Wenner <arisunz at disroot dot org>"]
+authors = [
+    "Ariela Wenner <arisunz at disroot dot org>",
+    "Myriam Contributors <myriam at myriam dot actor>"
+]
 
 [features]
 default = ["remote", "tcp", "tor"]

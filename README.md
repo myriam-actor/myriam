@@ -41,7 +41,7 @@ tokio::time::sleep(Duration::from_millis(100));
 remote_handle.send(Message::Ping).await.unwrap_err();
 ```
 
-Check out the [repo examples](https://codeberg.org/arisunz/myriam-rs/src/branch/main/examples) for a more comprehensive demo.
+Check out the examples for a more comprehensive demo.
 
 ## features
 
