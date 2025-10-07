@@ -18,7 +18,7 @@ let router_handle = Router::with_netlayer(layer, Some(RouterOpts::default())).aw
 
 // routers handle external access to several attached actors
 // we can think of this exposed actor as a capability
-// "tor:0139aa9b4d523e1da515ce21a818e579acd005fbd0aea62ef094ac1b845f99e7@someaddress.onion"
+// "tor:4ruu43hmgibt5lgg3cvghbrmprotl5m7ts2lral5wnhf5wwkocva@someaddress.onion"
 let address = router_handle.attach(untyped_handle).await?;
 
 let new_layer =
