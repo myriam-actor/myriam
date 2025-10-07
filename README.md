@@ -1,4 +1,4 @@
-# myriam-rs
+# Myriam
 
 Local and remote actor model implementation with an API heavily inspired in (but not necessarily equivalent to) [Goblins](https://gitlab.com/spritely/guile-goblins).
 
