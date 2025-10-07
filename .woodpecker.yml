@@ -1,9 +1,0 @@
-pipeline:
-  test:
-    when:
-      event: push
-    image: rust
-    commands:
-      - apt update
-      - apt install -y protobuf-compiler
-      - cargo test
