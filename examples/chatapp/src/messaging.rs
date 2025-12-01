@@ -3,7 +3,7 @@ use myriam::{
         local::LocalHandle,
         remote::{
             address::ActorAddress, dencoder::bincode::BincodeDencoder,
-            netlayer::tor_layer::TorNetLayer, router::RemoteHandle,
+            netlayer::tor_layer::TorLayer, router::RemoteHandle,
         },
         Actor,
     },
@@ -16,7 +16,7 @@ use crate::{AppError, Report};
 
 pub type MessengerHandle = LocalHandle<MessengerCmd, (), AppError>;
 pub type MessengerRemoteHandle =
-    RemoteHandle<MessengerCmd, (), AppError, BincodeDencoder, TorNetLayer>;
+    RemoteHandle<MessengerCmd, (), AppError, BincodeDencoder, TorLayer>;
 
 #[derive(Debug)]
 pub struct Messenger {
@@ -83,7 +83,9 @@ impl Actor<MessengerCmd, (), AppError> for Messenger {
                 } else {
                     let handle = RemoteHandle::new(
                         &addr,
-                        TorNetLayer::new("127.0.0.1:9050", &format!("/tmp/chatapp/{}", self.name)),
+                        TorLayer::new(self.name.clone())
+                            .await
+                            .map_err(|_| AppError::NotReady)?,
                     );
 
                     if let Err(err) = handle
@@ -92,7 +94,7 @@ impl Actor<MessengerCmd, (), AppError> for Messenger {
                         )))
                         .await
                     {
-                        let _ = self.tui_sender.send(Report::error(err.to_string()));
+                        let _ = self.tui_sender.send(Report::error(err.to_string())).await;
                         Err(AppError::PeerMsg)
                     } else {
                         self.peer.replace(handle);
@@ -110,7 +112,9 @@ impl Actor<MessengerCmd, (), AppError> for Messenger {
                 } else {
                     let handle = RemoteHandle::new(
                         &addr,
-                        TorNetLayer::new("127.0.0.1:9050", &format!("/tmp/chatapp/{}", self.name)),
+                        TorLayer::new(self.name.clone())
+                            .await
+                            .map_err(|_| AppError::NotReady)?,
                     );
 
                     self.peer.replace(handle);

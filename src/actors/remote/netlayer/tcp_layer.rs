@@ -78,7 +78,7 @@ impl NetLayer for TcpNetLayer {
             .0)
     }
 
-    fn address(&self) -> Result<String, Self::Error> {
+    async fn address(&self) -> Result<String, Self::Error> {
         Ok(self
             .listener
             .as_ref()
@@ -131,7 +131,7 @@ mod tests {
         let mut nl = TcpNetLayer::new();
         nl.init().await.unwrap();
 
-        let addr = nl.address().unwrap();
+        let addr = nl.address().await.unwrap();
 
         let listen = tokio::spawn(async move { nl.accept().await.map(|_| ()) });
         tokio::spawn(async move {
@@ -150,7 +150,7 @@ mod tests {
         let mut nl = TcpNetLayer::new();
         nl.init().await.unwrap();
 
-        let addr = nl.address().unwrap();
+        let addr = nl.address().await.unwrap();
 
         tokio::spawn(async move {
             let _ = nl.accept().await;

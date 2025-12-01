@@ -52,5 +52,5 @@ pub trait NetLayer {
     ///
     /// this net layer's exposed address
     ///
-    fn address(&self) -> Result<String, Self::Error>;
+    fn address(&self) -> impl Future<Output = Result<String, Self::Error>>;
 }

@@ -68,7 +68,7 @@ impl Router {
             Error::Init(e.to_string())
         })?;
 
-        let host_address = netlayer.address().map_err(|e| {
+        let host_address = netlayer.address().await.map_err(|e| {
             tracing::error!("router init: failed to obtain address - {e}");
             Error::Init(e.to_string())
         })?;
@@ -216,6 +216,11 @@ where
         Error::Send(err.to_string())
     })?;
 
+    stream.flush().await.map_err(|err| {
+        tracing::error!("router: could not flush response - {err}");
+        Error::Send(err.to_string())
+    })?;
+
     Ok(())
 }
 
@@ -292,7 +297,7 @@ impl RouterHandle {
     ///
     /// this address can be seen as a capability, and revoked at any time. see [`Self::revoke()`].
     ///
-    /// usefull for persisting actor identities.
+    /// useful for persisting actor identities.
     ///
     pub async fn attach_with_id(
         &self,
@@ -328,7 +333,7 @@ impl RouterHandle {
     }
 
     ///
-    /// revoke this address. any incoming requests using thereafter will be dropped.
+    /// revoke this address. any further requests will be dropped.
     ///
     pub async fn revoke(&self, address: &ActorAddress) -> Result<ActorAddress, Error> {
         let (sender, receiver) = oneshot::channel();
@@ -464,7 +469,7 @@ where
         })?;
 
         stream.flush().await.map_err(|err| {
-            tracing::error!("remote handle: failed to send message - {err}");
+            tracing::error!("remote handle: failed to flush message - {err}");
             Error::Send(err.to_string())
         })?;
 
