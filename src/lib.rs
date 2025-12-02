@@ -47,7 +47,7 @@
 //!     = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 }).await?;
 //!
 //! // create router with a TOR netlayer
-//! let layer = TorLayer::new("myriam-foo".to_string()).await?;
+//! let layer = TorLayer::new("myriam-foo".to_string(), 8081).await?;
 //!
 //! let router_handle = Router::with_netlayer(layer, Some(RouterOpts::default())).await?;
 //!
@@ -56,7 +56,7 @@
 //! // "tor:4ruu43hmgibt5lgg3cvghbrmprotl5m7ts2lral5wnhf5wwkocva@someaddress.onion"
 //! let address = router_handle.attach(untyped_handle).await?;
 //!
-//! let new_layer = TorLayer::new("myriam-bar".to_string()).await?;
+//! let new_layer = TorLayer::new("myriam-bar".to_string(), 8082).await?;
 //!
 //! let remote_handle
 //!     = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorLayer>::new(&address, new_layer);

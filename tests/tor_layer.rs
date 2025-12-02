@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 async fn roundtrip() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().init();
 
-    let tor_layer = TorLayer::new("actor-1".to_string()).await?;
+    let tor_layer = TorLayer::new("actor-1".to_string(), 2050).await?;
     let (_, untyped) = spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 15 }).await?;
 
     let router_opts = RouterOpts::new(60_000, 5_000);
@@ -35,7 +35,7 @@ async fn roundtrip() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("our address is {address}");
 
-    let tor_layer = TorLayer::new("actor-2".to_string()).await?;
+    let tor_layer = TorLayer::new("actor-2".to_string(), 2051).await?;
     let remote_handle =
         RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorLayer>::new(&address, tor_layer);
 
