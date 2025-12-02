@@ -39,7 +39,7 @@ impl TorLayer {
     pub async fn new(nickname: String, port: u16) -> Result<Self, Error> {
         let client = TorClient::create_bootstrapped(TorClientConfig::default())
             .await
-            .unwrap();
+            .map_err(|e| Error::Bootstrap(e.to_string()))?;
 
         Ok(Self {
             client,
@@ -69,20 +69,27 @@ impl NetLayer for TorLayer {
     }
 
     async fn connect(&self, addr: &str) -> Result<impl AsyncMsgStream, Self::Error> {
-        Ok(self.client.connect(addr).await.unwrap())
+        self.client
+            .connect(addr)
+            .await
+            .map_err(|e| Error::Connect(e.to_string()))
     }
 
     async fn init(&mut self) -> Result<(), Self::Error> {
         let service_config = OnionServiceConfigBuilder::default()
-            .nickname(self.nickname.parse().unwrap())
+            .nickname(
+                self.nickname
+                    .parse()
+                    .map_err(|_| Error::Init("invalid nickname".to_string()))?,
+            )
             .build()
-            .unwrap();
+            .map_err(|e| Error::Init(e.to_string()))?;
 
         let (service, requests_stream) = self
             .client
             .launch_onion_service(service_config)
-            .unwrap()
-            .unwrap();
+            .map_err(|e| Error::Init(e.to_string()))?
+            .ok_or(Error::Init("could not launch onion service".to_string()))?;
 
         let status_stream = service.status_events();
         let mut binding = status_stream
@@ -90,8 +97,8 @@ impl NetLayer for TorLayer {
 
         match tokio::time::timeout(Duration::from_secs(60), binding.next()).await {
                             Ok(Some(_)) => tracing::info!("onion service is fully reachable."),
-                            Ok(None) => tracing::info!("status stream ended unexpectedly."),
-                            Err(_) => tracing::info!(
+                            Ok(None) => tracing::warn!("status stream ended unexpectedly."),
+                            Err(_) => tracing::warn!(
                                 "timeout waiting for service to become reachable. actor may or may not receive messages."
                             ),
                         };
@@ -146,7 +153,9 @@ impl NetLayer for TorLayer {
         let (tx, rx) = oneshot::channel::<Result<DataStream, Error>>();
 
         if let Some(channel) = &self.channel {
-            channel.send(tx).await.unwrap();
+            channel.send(tx).await.map_err(|_| {
+                Error::Accept("failed to receive response from onion service loop".to_string())
+            })?;
         } else {
             return Err(Error::NotReady);
         }
