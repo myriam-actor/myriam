@@ -47,4 +47,4 @@ Check out the examples for a more comprehensive demo.
 
 * `remote (default)`: support for remote messaging
 * `tcp (default)`: TCP test-only net layer
-* `tor (default)`: Tor net layer - requires a running and properly configured Tor router
+* `tor (default)`: Tor net layer - built with [arti_client](https://gitlab.torproject.org/tpo/core/arti)
