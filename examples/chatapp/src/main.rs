@@ -3,7 +3,7 @@ use messaging::{Messenger, MessengerCmd};
 use models::{AppError, Report};
 use myriam::{
     actors::remote::{
-        self, dencoder::bincode::BincodeDencoder, netlayer::tor_layer::TorNetLayer, router::Router,
+        self, dencoder::bincode::BincodeDencoder, netlayer::tor_layer::TorLayer, router::Router,
     },
     messaging::Message,
 };
@@ -19,25 +19,22 @@ async fn main() -> Result<()> {
     install_hooks()?;
 
     let mut args = std::env::args().skip(1).take(2);
-    let data_dir = args
-        .next()
-        .ok_or(AppError::MissingArg("Tor data dir".to_string()))?;
 
-    let port: u16 = args
+    let nickname = args
         .next()
-        .ok_or(AppError::MissingArg("port".to_string()))?
-        .parse()?;
+        .ok_or(AppError::MissingArg("keystore nickname".to_string()))?;
 
-    let router = Router::with_netlayer(
-        TorNetLayer::new_for_service("127.0.0.1:9050", &format!("127.0.0.1:{port}"), &data_dir)
-            .await?,
-        None,
-    )
-    .await?;
+    let port = args
+        .next()
+        .ok_or(AppError::MissingArg("service port".to_string()))?
+        .parse()
+        .map_err(|_| AppError::InvalidArg("not a valid port".to_string()))?;
+
+    let router = Router::with_netlayer(TorLayer::new(nickname.clone(), port).await?, None).await?;
 
     let (tui_sender, tui_receiver) = mpsc::channel::<Report>(1024);
 
-    let messenger = Messenger::new(data_dir, tui_sender);
+    let messenger = Messenger::new(nickname, tui_sender);
     let (messenger_local, mut messenger_untyped) =
         remote::spawn_untyped::<_, _, _, BincodeDencoder>(messenger).await?;
 

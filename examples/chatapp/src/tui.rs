@@ -112,7 +112,7 @@ impl App {
 
         let count = self.messages.len();
         let height = msgs_area.height as usize - 2;
-        let offset = if count <= height { 0 } else { count - height };
+        let offset = count.saturating_sub(height);
         let mut msgs_state = ListState::default().with_offset(offset);
         frame.render_stateful_widget(messages, msgs_area, &mut msgs_state);
 
@@ -120,7 +120,7 @@ impl App {
 
         let count = self.input_buffer.len();
         let width = input_area.width as usize - 2;
-        let offset = if count <= width { 0 } else { count - width };
+        let offset = count.saturating_sub(width);
 
         let input = Paragraph::new(self.buffer_to_string())
             .block(Block::bordered().title("input"))
@@ -176,13 +176,14 @@ impl App {
                 }
 
                 // cmd send
-                if key.kind == KeyEventKind::Press && key.code == KeyCode::Enter {
-                    if !self.input_buffer.is_empty() {
-                        let msg = self.buffer_flush();
-                        match msg.parse::<Command>() {
-                            Ok(cmd) => self.handle_command(cmd),
-                            Err(err) => self.messages.push(Report::error(err.to_string())),
-                        }
+                if key.kind == KeyEventKind::Press
+                    && key.code == KeyCode::Enter
+                    && !self.input_buffer.is_empty()
+                {
+                    let msg = self.buffer_flush();
+                    match msg.parse::<Command>() {
+                        Ok(cmd) => self.handle_command(cmd),
+                        Err(err) => self.messages.push(Report::error(err.to_string())),
                     }
                 }
             }

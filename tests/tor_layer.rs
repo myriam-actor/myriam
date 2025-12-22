@@ -1,10 +1,8 @@
 #![cfg(feature = "tor")]
 
 //!
-//! To run:
-//! 1. create the /tmp/myriam/test directory
-//! 2. give it the appropriate permissions, e.g. with `chmod -R 700 /tmp/myriam/test`
-//! 3. start tor with the torrc provided in this directory, like `tor -f tests/torrc`
+//! Tor roundtrip test
+//! * extremely slow since we have to establish two separate Tor circuits, so ignored by default
 //!
 
 use std::fmt::Display;
@@ -12,10 +10,10 @@ use std::fmt::Display;
 use myriam::{
     actors::{
         remote::{
-            self,
             dencoder::bincode::BincodeDencoder,
-            netlayer::tor_layer::TorNetLayer,
+            netlayer::tor_layer::TorLayer,
             router::{RemoteHandle, Router, RouterOpts},
+            spawn_untyped,
         },
         Actor,
     },
@@ -26,33 +24,23 @@ use serde::{Deserialize, Serialize};
 #[ignore]
 #[tokio::test]
 async fn roundtrip() -> Result<(), Box<dyn std::error::Error>> {
-    let layer =
-        TorNetLayer::new_for_service("127.0.0.1.9050", "127.0.0.1:8080", "/tmp/myriam/test")
-            .await?;
+    tracing_subscriber::fmt().init();
 
-    let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
-        .await
-        .unwrap();
+    let tor_layer = TorLayer::new("actor-1".to_string(), 2050).await?;
+    let (_, untyped) = spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 15 }).await?;
 
-    let router = Router::with_netlayer(
-        layer,
-        Some(RouterOpts {
-            msg_read_timeout: 60_000,
-            ..Default::default()
-        }),
-    )
-    .await
-    .unwrap();
+    let router_opts = RouterOpts::new(60_000, 5_000);
+    let router_handle = Router::with_netlayer(tor_layer, Some(router_opts)).await?;
+    let address = router_handle.attach(untyped).await?;
 
-    let addr = router.attach(handle).await.unwrap();
+    tracing::info!("our address is {address}");
 
-    let client_layer = TorNetLayer::new("127.0.0.1:9050", "/tmp/myrian/test");
+    let tor_layer = TorLayer::new_for_client("actor-2".to_string()).await?;
+    let remote_handle =
+        RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorLayer>::new(&address, tor_layer);
 
-    let remote =
-        RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorNetLayer>::new(&addr, client_layer);
-
-    let res = remote.send(Message::Task(5)).await.unwrap();
-    assert!(matches!(res, Ok(Reply::Task(15))));
+    let response = remote_handle.send(Message::Task(3)).await??;
+    assert!(matches!(response, Reply::Task(45)));
 
     Ok(())
 }

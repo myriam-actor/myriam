@@ -98,6 +98,7 @@ pub enum AppError {
     PeerMsg,
     NotReady,
     NotAllowed,
+    InvalidArg(String),
 }
 
 impl Display for AppError {
@@ -108,6 +109,7 @@ impl Display for AppError {
             AppError::PeerMsg => write!(f, "failed to send message to peer"),
             AppError::NotReady => write!(f, "actor is not ready to handle this message"),
             AppError::NotAllowed => write!(f, "message is currently forbidden by this actor"),
+            AppError::InvalidArg(msg) => write!(f, "invalid arg: {msg}"),
         }
     }
 }

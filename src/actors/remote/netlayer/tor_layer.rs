@@ -1,168 +1,183 @@
 //!
 //! Tor net layer
 //!
-//! Requires properly configured Tor router with a hidden service per router in your application
-//!
 
-use std::{fmt::Display, path::Path};
+use std::sync::Arc;
+use std::{fmt::Display, time::Duration};
 
-use tokio::{
-    io::BufStream,
-    net::{TcpListener, TcpStream},
-};
+use arti_client::{TorClient, TorClientConfig};
+use futures::lock::Mutex;
+use futures::{Stream, StreamExt};
+use safelog::DisplayRedacted;
+use tor_cell::relaycell::msg::Connected;
+use tor_hsservice::config::OnionServiceConfigBuilder;
+use tor_hsservice::{RunningOnionService, StreamRequest};
+use tor_proto::client::stream::IncomingStreamRequest;
+use tor_rtcompat::PreferredRuntime;
 
-use super::NetLayer;
+use crate::actors::remote::netlayer::{AsyncMsgStream, NetLayer};
+use crate::utils;
 
 ///
-/// Tor net layer
+/// Tor netlayer powered by Arti
 ///
-#[derive(Debug)]
-pub struct TorNetLayer {
-    proxy_address: String,
-    tordata_dir: String,
-    local_address: Option<String>,
-    hostname: Option<String>,
-    listener: Option<TcpListener>,
+#[allow(missing_debug_implementations)]
+pub struct TorLayer {
+    client: TorClient<PreferredRuntime>,
+    nickname: String,
+    port: Option<u16>,
+    address: Option<String>,
+    service: Option<Arc<RunningOnionService>>,
+
+    // here lies a testament to my inadequacy
+    stream: Option<Arc<Mutex<Box<dyn Stream<Item = StreamRequest> + Send + Unpin>>>>,
 }
 
-impl TorNetLayer {
+impl TorLayer {
     ///
-    /// Create a new Tor layer with the necessary setup for connecting to other actors
+    /// boostrap a Tor circuit ready for either making remote connections or creating a new Router
     ///
-    pub fn new<S>(proxy_address: S, tordata_dir: S) -> Self
-    where
-        S: Into<String>,
-    {
-        Self {
-            proxy_address: proxy_address.into(),
-            tordata_dir: tordata_dir.into(),
-            local_address: None,
-            hostname: None,
-            listener: None,
-        }
-    }
-
-    ///
-    /// creates a new Tor layer with the required setup for
-    /// exposing this actor to the network
-    ///
-    pub async fn new_for_service<S>(
-        proxy_address: S,
-        local_address: S,
-        tordata_dir: S,
-    ) -> Result<Self, Error>
-    where
-        S: Into<String>,
-    {
-        Self::new(proxy_address, tordata_dir)
-            .as_service(local_address)
+    pub async fn new(nickname: String, port: u16) -> Result<Self, Error> {
+        let client = TorClient::create_bootstrapped(TorClientConfig::default())
             .await
+            .map_err(|e| Error::Bootstrap(e.to_string()))?;
+
+        Ok(Self {
+            client,
+            nickname,
+            port: Some(port),
+            address: None,
+            service: None,
+            stream: None,
+        })
     }
 
     ///
-    /// create a new layer from this one, capable of accepting connections
+    /// bootstrap a Tor circuit for making connections. note that a layer created this
+    /// way will get a port assigned at random. if you want to chose the port, use
+    /// [Self::new] instead.
     ///
-    pub async fn as_service<S>(mut self, local_address: S) -> Result<Self, Error>
-    where
-        S: Into<String>,
-    {
-        let hostname = self.hostname().await?;
-        self.hostname.replace(hostname);
-        self.local_address.replace(local_address.into());
+    pub async fn new_for_client(nickname: String) -> Result<Self, Error> {
+        let client = TorClient::create_bootstrapped(TorClientConfig::default())
+            .await
+            .map_err(|e| Error::Bootstrap(e.to_string()))?;
 
-        Ok(self)
-    }
-
-    ///
-    /// this layer's proxy address
-    ///
-    pub fn proxy_address(&self) -> &str {
-        &self.proxy_address
-    }
-
-    ///
-    /// this layer's Tor data directory
-    ///
-    pub fn tordata_dir(&self) -> &str {
-        &self.tordata_dir
-    }
-
-    ///
-    /// this layer's .onion address
-    ///
-    pub async fn hostname(&self) -> Result<String, Error> {
-        let path = Path::new(&self.tordata_dir)
-            .join("hostname")
-            .canonicalize()
-            .map_err(|e| {
-                tracing::error!("tor layer - hostname : {e}");
-                Error::Hostname(e.to_string())
-            })?;
-
-        tokio::fs::read_to_string(path).await.map_err(|e| {
-            tracing::error!("tor layer - hostname: {e}");
-            Error::Hostname(e.to_string())
+        Ok(Self {
+            client,
+            nickname,
+            port: None,
+            address: None,
+            service: None,
+            stream: None,
         })
     }
 }
 
-impl NetLayer for TorNetLayer {
+impl NetLayer for TorLayer {
     type Error = Error;
 
     fn name() -> &'static str {
         "tor"
     }
 
-    async fn connect(&self, addr: &str) -> Result<impl super::AsyncMsgStream, Self::Error> {
-        let proxy = TcpStream::connect(&self.proxy_address)
+    async fn connect(&self, addr: &str) -> Result<impl AsyncMsgStream, Self::Error> {
+        self.client
+            .connect(addr)
             .await
-            .map_err(|err| {
-                tracing::error!("tor socket: proxy connect - {err}");
-                Error::Connect(err.to_string())
-            })?;
-
-        let mut stream = BufStream::new(proxy);
-        socks5_impl::client::connect(&mut stream, (addr, 80), None)
-            .await
-            .map_err(|err| {
-                tracing::error!("tor socket: connect - {err}");
-                Error::Connect(err.to_string())
-            })?;
-
-        Ok(stream)
+            .map_err(|e| Error::Connect(e.to_string()))
     }
 
     async fn init(&mut self) -> Result<(), Self::Error> {
-        self.listener.replace(
-            TcpListener::bind(&self.local_address.as_ref().ok_or(Error::NotReady)?)
-                .await
-                .map_err(|e| {
-                    tracing::error!("tor socket - init: {e}");
-                    Error::Init(e.to_string())
-                })?,
+        let service_config = OnionServiceConfigBuilder::default()
+            .nickname(
+                self.nickname
+                    .parse()
+                    .map_err(|_| Error::Init("invalid nickname".to_string()))?,
+            )
+            .build()
+            .map_err(|e| Error::Init(e.to_string()))?;
+
+        let (service, requests_stream) = self
+            .client
+            .launch_onion_service(service_config)
+            .map_err(|e| Error::Init(e.to_string()))?
+            .ok_or(Error::Init("could not launch onion service".to_string()))?;
+
+        let status_stream = service.status_events();
+        let mut binding = status_stream
+            .filter(|status| futures::future::ready(status.state().is_fully_reachable()));
+
+        match tokio::time::timeout(Duration::from_secs(60), binding.next()).await {
+                            Ok(Some(_)) => tracing::info!("onion service is fully reachable."),
+                            Ok(None) => tracing::warn!("status stream ended unexpectedly."),
+                            Err(_) => tracing::warn!(
+                                "timeout waiting for service to become reachable. actor may or may not receive messages."
+                            ),
+                        };
+
+        if self.port.is_none() {
+            let port = self.port.unwrap_or(
+                utils::random_unused_port()
+                    .await
+                    .map_err(|e| Error::Hostname(e.to_string()))?,
+            );
+
+            self.port.replace(port);
+        }
+
+        let redacted = match service.onion_address() {
+            Some(a) => a,
+            None => {
+                return Err(Error::Init(
+                    "failed to query our own onion address".to_string(),
+                ));
+            }
+        };
+        let address = format!(
+            "{}:{}",
+            redacted.display_unredacted(),
+            self.port.expect("valid port should be set")
         );
+
+        let requests_stream = tor_hsservice::handle_rend_requests(requests_stream);
+
+        self.service.replace(service);
+        self.stream
+            .replace(Arc::new(Mutex::new(Box::new(requests_stream))));
+        self.address.replace(address);
 
         Ok(())
     }
 
-    async fn accept(&self) -> Result<impl super::AsyncMsgStream, Self::Error> {
-        self.listener
-            .as_ref()
-            .ok_or(Error::NotReady)?
-            .accept()
-            .await
-            .map_err(|e| {
-                tracing::error!("tor layer: failed to accept - {e}");
-                Error::Recv(e.to_string())
-            })
-            .map(|s| s.0)
+    async fn accept(&self) -> Result<impl AsyncMsgStream, Self::Error> {
+        loop {
+            if let Some(stream) = &self.stream {
+                if let Some(request) = stream.lock().await.next().await {
+                    match request.request() {
+                        IncomingStreamRequest::Begin(begin)
+                            if begin.port() == self.port.expect("valid port should be set") =>
+                        {
+                            return request
+                                .accept(Connected::new_empty())
+                                .await
+                                .map_err(|e| Error::Accept(e.to_string()));
+                        }
+                        _ => {
+                            let _ = request.shutdown_circuit();
+                            continue;
+                        }
+                    }
+                } else {
+                    return Err(Error::NotReady);
+                }
+            } else {
+                return Err(Error::NotReady);
+            }
+        }
     }
 
-    fn address(&self) -> Result<String, Self::Error> {
-        self.hostname
-            .to_owned()
-            .ok_or(Error::NotReady)
-            .map(|s| s.trim().to_owned())
+    async fn address(&self) -> Result<String, Self::Error> {
+        self.address.to_owned().ok_or(Error::NotReady)
     }
 }
 
@@ -172,8 +187,9 @@ impl NetLayer for TorNetLayer {
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub enum Error {
+    Bootstrap(String),
     Init(String),
-    Recv(String),
+    Accept(String),
     Connect(String),
     Hostname(String),
     NotReady,
@@ -183,9 +199,10 @@ impl Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Error::Init(ctx) => write!(f, "failed to init layer: {ctx}"),
-            Error::Recv(ctx) => write!(f, "failed to receive data: {ctx}"),
+            Error::Accept(ctx) => write!(f, "failed to receive data: {ctx}"),
             Error::Connect(ctx) => write!(f, "failed to connect to endpoint: {ctx}"),
             Error::Hostname(ctx) => write!(f, "failed to recover our hostname: {ctx}"),
+            Error::Bootstrap(ctx) => write!(f, "failed to connect to Tor network: {ctx}"),
             Error::NotReady => write!(f, "layer not ready"),
         }
     }
