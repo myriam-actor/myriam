@@ -35,7 +35,7 @@ async fn roundtrip() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!("our address is {address}");
 
-    let tor_layer = TorLayer::new("actor-2".to_string(), 2051).await?;
+    let tor_layer = TorLayer::new_for_client("actor-2".to_string()).await?;
     let remote_handle =
         RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorLayer>::new(&address, tor_layer);
 

@@ -16,15 +16,16 @@ use tor_proto::client::stream::IncomingStreamRequest;
 use tor_rtcompat::PreferredRuntime;
 
 use crate::actors::remote::netlayer::{AsyncMsgStream, NetLayer};
+use crate::utils;
 
 ///
-/// TODO: document me
+/// Tor netlayer powered by Arti
 ///
 #[allow(missing_debug_implementations)]
 pub struct TorLayer {
     client: TorClient<PreferredRuntime>,
     nickname: String,
-    port: u16,
+    port: Option<u16>,
     address: Option<String>,
     service: Option<Arc<RunningOnionService>>,
 
@@ -44,7 +45,27 @@ impl TorLayer {
         Ok(Self {
             client,
             nickname,
-            port,
+            port: Some(port),
+            address: None,
+            service: None,
+            stream: None,
+        })
+    }
+
+    ///
+    /// bootstrap a Tor circuit for making connections. note that a layer created this
+    /// way will get a port assigned at random. if you want to chose the port, use
+    /// [Self::new] instead.
+    ///
+    pub async fn new_for_client(nickname: String) -> Result<Self, Error> {
+        let client = TorClient::create_bootstrapped(TorClientConfig::default())
+            .await
+            .map_err(|e| Error::Bootstrap(e.to_string()))?;
+
+        Ok(Self {
+            client,
+            nickname,
+            port: None,
             address: None,
             service: None,
             stream: None,
@@ -94,6 +115,16 @@ impl NetLayer for TorLayer {
                             ),
                         };
 
+        if self.port.is_none() {
+            let port = self.port.unwrap_or(
+                utils::random_unused_port()
+                    .await
+                    .map_err(|e| Error::Hostname(e.to_string()))?,
+            );
+
+            self.port.replace(port);
+        }
+
         let redacted = match service.onion_address() {
             Some(a) => a,
             None => {
@@ -102,7 +133,11 @@ impl NetLayer for TorLayer {
                 ));
             }
         };
-        let address = format!("{}:{}", redacted.display_unredacted(), self.port);
+        let address = format!(
+            "{}:{}",
+            redacted.display_unredacted(),
+            self.port.expect("valid port should be set")
+        );
 
         let requests_stream = tor_hsservice::handle_rend_requests(requests_stream);
 
@@ -119,7 +154,9 @@ impl NetLayer for TorLayer {
             if let Some(stream) = &self.stream {
                 if let Some(request) = stream.lock().await.next().await {
                     match request.request() {
-                        IncomingStreamRequest::Begin(begin) if begin.port() == self.port => {
+                        IncomingStreamRequest::Begin(begin)
+                            if begin.port() == self.port.expect("valid port should be set") =>
+                        {
                             return request
                                 .accept(Connected::new_empty())
                                 .await

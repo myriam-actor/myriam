@@ -105,6 +105,8 @@
 pub mod actors;
 pub mod messaging;
 
+pub(crate) mod utils;
+
 #[cfg(test)]
 #[allow(unused)]
 mod tests {

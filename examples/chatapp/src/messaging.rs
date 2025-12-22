@@ -82,7 +82,7 @@ impl Actor<MessengerCmd, (), AppError> for Messenger {
                 } else {
                     let handle = RemoteHandle::new(
                         &addr,
-                        TorLayer::new(self.name.clone(), 4444) // port doesnt really matter for client connections
+                        TorLayer::new_for_client(self.name.clone())
                             .await
                             .map_err(|_| AppError::NotReady)?,
                     );
@@ -111,7 +111,7 @@ impl Actor<MessengerCmd, (), AppError> for Messenger {
                 } else {
                     let handle = RemoteHandle::new(
                         &addr,
-                        TorLayer::new(self.name.clone(), 4444)
+                        TorLayer::new_for_client(self.name.clone())
                             .await
                             .map_err(|_| AppError::NotReady)?,
                     );
