@@ -13,6 +13,8 @@ use serde::{de::DeserializeOwned, Serialize};
 
 pub mod bincode;
 
+pub mod bitcode;
+
 ///
 /// trait for abstracting message coder/decoder
 ///

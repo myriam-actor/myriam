@@ -10,7 +10,7 @@ use std::fmt::Display;
 use myriam::{
     actors::{
         remote::{
-            dencoder::bincode::BincodeDencoder,
+            dencoder::bitcode::BitcodeDencoder,
             netlayer::tor_layer::TorLayer,
             router::{RemoteHandle, Router, RouterOpts},
             spawn_untyped,
@@ -27,7 +27,7 @@ async fn roundtrip() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().init();
 
     let tor_layer = TorLayer::new("actor-1".to_string(), 2050).await?;
-    let (_, untyped) = spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 15 }).await?;
+    let (_, untyped) = spawn_untyped::<_, _, _, BitcodeDencoder>(Mult { a: 15 }).await?;
 
     let router_opts = RouterOpts::new(60_000, 5_000);
     let router_handle = Router::with_netlayer(tor_layer, Some(router_opts)).await?;
@@ -37,7 +37,7 @@ async fn roundtrip() -> Result<(), Box<dyn std::error::Error>> {
 
     let tor_layer = TorLayer::new_for_client("actor-2".to_string()).await?;
     let remote_handle =
-        RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorLayer>::new(&address, tor_layer);
+        RemoteHandle::<u32, u32, SomeError, BitcodeDencoder, TorLayer>::new(&address, tor_layer);
 
     let response = remote_handle.send(Message::Task(3)).await??;
     assert!(matches!(response, Reply::Task(45)));

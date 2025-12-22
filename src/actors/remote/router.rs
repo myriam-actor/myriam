@@ -544,7 +544,7 @@ mod tests {
             remote::{
                 self,
                 address::PeerId,
-                dencoder::bincode::BincodeDencoder,
+                dencoder::bitcode::BitcodeDencoder,
                 netlayer::tcp_layer::TcpNetLayer,
                 router::{RemoteHandle, Router, RouterOpts},
             },
@@ -555,7 +555,7 @@ mod tests {
 
     #[tokio::test]
     async fn spawn_and_message() {
-        let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+        let (_, handle) = remote::spawn_untyped::<_, _, _, BitcodeDencoder>(Mult { a: 3 })
             .await
             .unwrap();
 
@@ -565,7 +565,7 @@ mod tests {
 
         let addr = router.attach(handle).await.unwrap();
 
-        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
+        let remote = RemoteHandle::<u32, u32, SomeError, BitcodeDencoder, TcpNetLayer>::new(
             &addr,
             TcpNetLayer::new(),
         );
@@ -576,7 +576,7 @@ mod tests {
 
     #[tokio::test]
     async fn spawn_with_id() {
-        let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+        let (_, handle) = remote::spawn_untyped::<_, _, _, BitcodeDencoder>(Mult { a: 3 })
             .await
             .unwrap();
 
@@ -592,7 +592,7 @@ mod tests {
 
         assert_eq!(peer_id, *addr.peer_id());
 
-        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
+        let remote = RemoteHandle::<u32, u32, SomeError, BitcodeDencoder, TcpNetLayer>::new(
             &addr,
             TcpNetLayer::new(),
         );
@@ -603,7 +603,7 @@ mod tests {
 
     #[tokio::test]
     async fn ping() {
-        let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+        let (_, handle) = remote::spawn_untyped::<_, _, _, BitcodeDencoder>(Mult { a: 3 })
             .await
             .unwrap();
 
@@ -613,7 +613,7 @@ mod tests {
 
         let addr = router.attach(handle).await.unwrap();
 
-        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
+        let remote = RemoteHandle::<u32, u32, SomeError, BitcodeDencoder, TcpNetLayer>::new(
             &addr,
             TcpNetLayer::new(),
         );
@@ -624,7 +624,7 @@ mod tests {
 
     #[tokio::test]
     async fn stop() {
-        let (_, mut handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+        let (_, mut handle) = remote::spawn_untyped::<_, _, _, BitcodeDencoder>(Mult { a: 3 })
             .await
             .unwrap();
 
@@ -636,7 +636,7 @@ mod tests {
 
         let addr = router.attach(handle).await.unwrap();
 
-        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
+        let remote = RemoteHandle::<u32, u32, SomeError, BitcodeDencoder, TcpNetLayer>::new(
             &addr,
             TcpNetLayer::new(),
         );
@@ -649,7 +649,7 @@ mod tests {
 
     #[tokio::test]
     async fn revoke() {
-        let (_, handle) = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 })
+        let (_, handle) = remote::spawn_untyped::<_, _, _, BitcodeDencoder>(Mult { a: 3 })
             .await
             .unwrap();
 
@@ -659,7 +659,7 @@ mod tests {
 
         let addr = router.attach(handle).await.unwrap();
 
-        let remote = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TcpNetLayer>::new(
+        let remote = RemoteHandle::<u32, u32, SomeError, BitcodeDencoder, TcpNetLayer>::new(
             &addr,
             TcpNetLayer::new(),
         );

@@ -246,7 +246,7 @@ mod tests {
 
     use crate::{
         actors::{
-            remote::dencoder::{bincode::BincodeDencoder, Dencoder},
+            remote::dencoder::{bitcode::BitcodeDencoder, Dencoder},
             tests::*,
         },
         messaging::{Message, MsgError, MsgResult, Reply},
@@ -256,14 +256,14 @@ mod tests {
     async fn spawning_and_messaging() {
         let mult = Mult { a: 2 };
 
-        let (_, handle) = super::spawn_untyped::<_, _, _, BincodeDencoder>(mult)
+        let (_, handle) = super::spawn_untyped::<_, _, _, BitcodeDencoder>(mult)
             .await
             .unwrap();
 
-        let msg = BincodeDencoder::encode(Message::Task(14u32)).unwrap();
+        let msg = BitcodeDencoder::encode(Message::Task(14u32)).unwrap();
 
         let raw = handle.send(msg).await.unwrap();
-        let res = BincodeDencoder::decode::<MsgResult<u32, SomeError>>(raw)
+        let res = BitcodeDencoder::decode::<MsgResult<u32, SomeError>>(raw)
             .unwrap()
             .unwrap();
 
@@ -274,14 +274,14 @@ mod tests {
     async fn ping() {
         let mult = Mult { a: 2 };
 
-        let (_, handle) = super::spawn_untyped::<_, _, _, BincodeDencoder>(mult)
+        let (_, handle) = super::spawn_untyped::<_, _, _, BitcodeDencoder>(mult)
             .await
             .unwrap();
 
-        let msg = BincodeDencoder::encode(Message::<u32>::Ping).unwrap();
+        let msg = BitcodeDencoder::encode(Message::<u32>::Ping).unwrap();
 
         let raw = handle.send(msg).await.unwrap();
-        let res = BincodeDencoder::decode::<MsgResult<u32, SomeError>>(raw)
+        let res = BitcodeDencoder::decode::<MsgResult<u32, SomeError>>(raw)
             .unwrap()
             .unwrap();
 
@@ -292,16 +292,16 @@ mod tests {
     async fn stop() {
         let mult = Mult { a: 2 };
 
-        let (_, mut handle) = super::spawn_untyped::<_, _, _, BincodeDencoder>(mult)
+        let (_, mut handle) = super::spawn_untyped::<_, _, _, BitcodeDencoder>(mult)
             .await
             .unwrap();
 
         handle.allow_stop(true);
 
-        let msg = BincodeDencoder::encode(Message::<u32>::Stop).unwrap();
+        let msg = BitcodeDencoder::encode(Message::<u32>::Stop).unwrap();
 
         let raw = handle.send(msg).await.unwrap();
-        let res = BincodeDencoder::decode::<MsgResult<u32, SomeError>>(raw)
+        let res = BitcodeDencoder::decode::<MsgResult<u32, SomeError>>(raw)
             .unwrap()
             .unwrap();
 
@@ -309,7 +309,7 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(10)).await;
 
-        let msg = BincodeDencoder::encode(Message::<u32>::Ping).unwrap();
+        let msg = BitcodeDencoder::encode(Message::<u32>::Ping).unwrap();
 
         handle.send(msg).await.unwrap_err();
     }
@@ -318,14 +318,14 @@ mod tests {
     async fn disallow_mut() {
         let mult = Mult { a: 2 };
 
-        let (_, handle) = super::spawn_untyped::<_, _, _, BincodeDencoder>(mult)
+        let (_, handle) = super::spawn_untyped::<_, _, _, BitcodeDencoder>(mult)
             .await
             .unwrap();
 
-        let msg = BincodeDencoder::encode(Message::<u32>::TaskMut(6)).unwrap();
+        let msg = BitcodeDencoder::encode(Message::<u32>::TaskMut(6)).unwrap();
 
         let raw = handle.send(msg).await.unwrap();
-        let res = BincodeDencoder::decode::<MsgResult<u32, SomeError>>(raw)
+        let res = BitcodeDencoder::decode::<MsgResult<u32, SomeError>>(raw)
             .unwrap()
             .unwrap_err();
 
