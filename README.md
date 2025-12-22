@@ -7,12 +7,10 @@ Local and remote actor model implementation with an API heavily inspired in (but
 // UntypedHandle tries to do the same, but requests and responses are
 // bag of bytes and have to be {de}serialized
 let (local_handle, untyped_handle)
-    = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 }).await?;
+    = remote::spawn_untyped::<_, _, _, BitcodeDencoder>(Mult { a: 3 }).await?;
 
 // create router with a TOR netlayer
-let layer =
-    TorNetLayer::new_for_service("127.0.0.1.9050", "127.0.0.1:8080", "/tmp/myriam/foo")
-        .await?;
+let layer = TorLayer::new("myriam-foo".to_string(), 8081).await?;
 
 let router_handle = Router::with_netlayer(layer, Some(RouterOpts::default())).await?;
 
@@ -21,12 +19,11 @@ let router_handle = Router::with_netlayer(layer, Some(RouterOpts::default())).aw
 // "tor:4ruu43hmgibt5lgg3cvghbrmprotl5m7ts2lral5wnhf5wwkocva@someaddress.onion"
 let address = router_handle.attach(untyped_handle).await?;
 
-let new_layer =
-    TorNetLayer::new_for_service("127.0.0.1.9050", "127.0.0.1:8081", "/tmp/myriam/bar")
-        .await?;
+let new_layer = TorLayer::new_for_client("myriam-bar".to_string()).await?;
+
 
 let remote_handle
-    = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorNetLayer>::new(&address, new_layer);
+    = RemoteHandle::<u32, u32, SomeError, BitcodeDencoder, TorNetLayer>::new(&address, new_layer);
 //                     type handle once ^
 
 // use RemoteHandle just like a LocalHandle

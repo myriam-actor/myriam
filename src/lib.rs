@@ -56,7 +56,7 @@
 //! // "tor:4ruu43hmgibt5lgg3cvghbrmprotl5m7ts2lral5wnhf5wwkocva@someaddress.onion"
 //! let address = router_handle.attach(untyped_handle).await?;
 //!
-//! let new_layer = TorLayer::new("myriam-bar".to_string(), 8082).await?;
+//! let new_layer = TorLayer::new_for_client("myriam-bar".to_string()).await?;
 //!
 //! let remote_handle
 //!     = RemoteHandle::<u32, u32, SomeError, BitcodeDencoder, TorLayer>::new(&address, new_layer);
