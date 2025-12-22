@@ -5,14 +5,13 @@
 use std::sync::Arc;
 use std::{fmt::Display, time::Duration};
 
-use arti_client::{DataStream, TorClient, TorClientConfig};
-use futures::StreamExt;
+use arti_client::{TorClient, TorClientConfig};
+use futures::lock::Mutex;
+use futures::{Stream, StreamExt};
 use safelog::DisplayRedacted;
-use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinHandle;
-use tor_cell::relaycell::msg::{Connected, End, EndReason};
+use tor_cell::relaycell::msg::Connected;
 use tor_hsservice::config::OnionServiceConfigBuilder;
-use tor_hsservice::RunningOnionService;
+use tor_hsservice::{RunningOnionService, StreamRequest};
 use tor_proto::client::stream::IncomingStreamRequest;
 use tor_rtcompat::PreferredRuntime;
 
@@ -28,8 +27,9 @@ pub struct TorLayer {
     port: u16,
     address: Option<String>,
     service: Option<Arc<RunningOnionService>>,
-    channel: Option<mpsc::Sender<oneshot::Sender<Result<DataStream, Error>>>>,
-    task: Option<JoinHandle<()>>,
+
+    // here lies a testament to my inadequacy
+    stream: Option<Arc<Mutex<Box<dyn Stream<Item = StreamRequest> + Send + Unpin>>>>,
 }
 
 impl TorLayer {
@@ -47,17 +47,8 @@ impl TorLayer {
             port,
             address: None,
             service: None,
-            channel: None,
-            task: None,
+            stream: None,
         })
-    }
-
-    ///
-    /// abort the layer's request stream event loop, if started
-    ///
-    pub fn abort(&mut self) -> Result<(), Error> {
-        self.task.as_ref().ok_or(Error::NotReady)?.abort();
-        Ok(())
     }
 }
 
@@ -113,54 +104,39 @@ impl NetLayer for TorLayer {
         };
         let address = format!("{}:{}", redacted.display_unredacted(), self.port);
 
-        let mut requests_stream = tor_hsservice::handle_rend_requests(requests_stream);
-
-        let port = self.port;
-        let (tx, mut rx) = mpsc::channel::<oneshot::Sender<Result<DataStream, Error>>>(1024);
-        let task = tokio::spawn(async move {
-            while let Some(request_stream) = requests_stream.next().await {
-                match request_stream.request() {
-                    IncomingStreamRequest::Begin(begin) if begin.port() == port => {
-                        if let Some(sender) = rx.recv().await {
-                            let stream = request_stream
-                                .accept(Connected::new_empty())
-                                .await
-                                .map_err(|e| Error::Accept(e.to_string()));
-
-                            if sender.send(stream).is_err() {
-                                tracing::error!("could not send DataStream, channel dropped?");
-                            }
-                        }
-                    }
-                    _ => {
-                        let _ = request_stream
-                            .reject(End::new_with_reason(EndReason::DONE))
-                            .await;
-                    }
-                }
-            }
-        });
+        let requests_stream = tor_hsservice::handle_rend_requests(requests_stream);
 
         self.service.replace(service);
-        self.task.replace(task);
+        self.stream
+            .replace(Arc::new(Mutex::new(Box::new(requests_stream))));
         self.address.replace(address);
-        self.channel.replace(tx);
 
         Ok(())
     }
 
     async fn accept(&self) -> Result<impl AsyncMsgStream, Self::Error> {
-        let (tx, rx) = oneshot::channel::<Result<DataStream, Error>>();
-
-        if let Some(channel) = &self.channel {
-            channel.send(tx).await.map_err(|_| {
-                Error::Accept("failed to receive response from onion service loop".to_string())
-            })?;
-        } else {
-            return Err(Error::NotReady);
+        loop {
+            if let Some(stream) = &self.stream {
+                if let Some(request) = stream.lock().await.next().await {
+                    match request.request() {
+                        IncomingStreamRequest::Begin(begin) if begin.port() == self.port => {
+                            return request
+                                .accept(Connected::new_empty())
+                                .await
+                                .map_err(|e| Error::Accept(e.to_string()));
+                        }
+                        _ => {
+                            let _ = request.shutdown_circuit();
+                            continue;
+                        }
+                    }
+                } else {
+                    return Err(Error::NotReady);
+                }
+            } else {
+                return Err(Error::NotReady);
+            }
         }
-
-        rx.await.map_err(|e| Error::Accept(e.to_string()))?
     }
 
     async fn address(&self) -> Result<String, Self::Error> {
