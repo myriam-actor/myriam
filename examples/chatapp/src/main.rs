@@ -3,7 +3,7 @@ use messaging::{Messenger, MessengerCmd};
 use models::{AppError, Report};
 use myriam::{
     actors::remote::{
-        self, dencoder::bincode::BincodeDencoder, netlayer::tor_layer::TorLayer, router::Router,
+        self, dencoder::bitcode::BitcodeDencoder, netlayer::tor_layer::TorLayer, router::Router,
     },
     messaging::Message,
 };
@@ -36,7 +36,7 @@ async fn main() -> Result<()> {
 
     let messenger = Messenger::new(nickname, tui_sender);
     let (messenger_local, mut messenger_untyped) =
-        remote::spawn_untyped::<_, _, _, BincodeDencoder>(messenger).await?;
+        remote::spawn_untyped::<_, _, _, BitcodeDencoder>(messenger).await?;
 
     messenger_untyped.allow_mut(true);
 

@@ -11,7 +11,7 @@
 //! #        Actor,
 //! #        remote::{
 //! #            self,
-//! #            dencoder::bincode::BincodeDencoder,
+//! #            dencoder::bitcode::BitcodeDencoder,
 //! #            netlayer::tor_layer::TorLayer,
 //! #            router::{RemoteHandle, Router, RouterOpts},
 //! #        },
@@ -44,7 +44,7 @@
 //! // UntypedHandle tries to do the same, but requests and responses are
 //! // bag of bytes and have to be {de}serialized
 //! let (local_handle, untyped_handle)
-//!     = remote::spawn_untyped::<_, _, _, BincodeDencoder>(Mult { a: 3 }).await?;
+//!     = remote::spawn_untyped::<_, _, _, BitcodeDencoder>(Mult { a: 3 }).await?;
 //!
 //! // create router with a TOR netlayer
 //! let layer = TorLayer::new("myriam-foo".to_string(), 8081).await?;
@@ -59,7 +59,7 @@
 //! let new_layer = TorLayer::new("myriam-bar".to_string(), 8082).await?;
 //!
 //! let remote_handle
-//!     = RemoteHandle::<u32, u32, SomeError, BincodeDencoder, TorLayer>::new(&address, new_layer);
+//!     = RemoteHandle::<u32, u32, SomeError, BitcodeDencoder, TorLayer>::new(&address, new_layer);
 //! //                     type handle once ^
 //!
 //! // use RemoteHandle just like a LocalHandle

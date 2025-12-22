@@ -2,7 +2,7 @@ use myriam::{
     actors::{
         local::LocalHandle,
         remote::{
-            address::ActorAddress, dencoder::bincode::BincodeDencoder,
+            address::ActorAddress, dencoder::bitcode::BitcodeDencoder,
             netlayer::tor_layer::TorLayer, router::RemoteHandle,
         },
         Actor,
@@ -16,7 +16,7 @@ use crate::{AppError, Report};
 
 pub type MessengerHandle = LocalHandle<MessengerCmd, (), AppError>;
 pub type MessengerRemoteHandle =
-    RemoteHandle<MessengerCmd, (), AppError, BincodeDencoder, TorLayer>;
+    RemoteHandle<MessengerCmd, (), AppError, BitcodeDencoder, TorLayer>;
 
 pub struct Messenger {
     name: String,
