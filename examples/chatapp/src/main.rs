@@ -18,12 +18,19 @@ mod tui;
 async fn main() -> Result<()> {
     install_hooks()?;
 
-    let mut args = std::env::args().skip(1).take(1);
+    let mut args = std::env::args().skip(1).take(2);
+
     let nickname = args
         .next()
         .ok_or(AppError::MissingArg("keystore nickname".to_string()))?;
 
-    let router = Router::with_netlayer(TorLayer::new(nickname.clone()).await?, None).await?;
+    let port = args
+        .next()
+        .ok_or(AppError::MissingArg("service port".to_string()))?
+        .parse()
+        .map_err(|_| AppError::InvalidArg("not a valid port".to_string()))?;
+
+    let router = Router::with_netlayer(TorLayer::new(nickname.clone(), port).await?, None).await?;
 
     let (tui_sender, tui_receiver) = mpsc::channel::<Report>(1024);
 

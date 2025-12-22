@@ -18,7 +18,6 @@ pub type MessengerHandle = LocalHandle<MessengerCmd, (), AppError>;
 pub type MessengerRemoteHandle =
     RemoteHandle<MessengerCmd, (), AppError, BincodeDencoder, TorLayer>;
 
-#[derive(Debug)]
 pub struct Messenger {
     name: String,
     tui_sender: Sender<Report>,
@@ -83,7 +82,7 @@ impl Actor<MessengerCmd, (), AppError> for Messenger {
                 } else {
                     let handle = RemoteHandle::new(
                         &addr,
-                        TorLayer::new(self.name.clone())
+                        TorLayer::new(self.name.clone(), 4444) // port doesnt really matter for client connections
                             .await
                             .map_err(|_| AppError::NotReady)?,
                     );
@@ -112,7 +111,7 @@ impl Actor<MessengerCmd, (), AppError> for Messenger {
                 } else {
                     let handle = RemoteHandle::new(
                         &addr,
-                        TorLayer::new(self.name.clone())
+                        TorLayer::new(self.name.clone(), 4444)
                             .await
                             .map_err(|_| AppError::NotReady)?,
                     );
