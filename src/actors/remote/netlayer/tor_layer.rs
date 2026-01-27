@@ -108,12 +108,12 @@ impl NetLayer for TorLayer {
             .filter(|status| futures::future::ready(status.state().is_fully_reachable()));
 
         match tokio::time::timeout(Duration::from_secs(60), binding.next()).await {
-                            Ok(Some(_)) => tracing::info!("onion service is fully reachable."),
-                            Ok(None) => tracing::warn!("status stream ended unexpectedly."),
-                            Err(_) => tracing::warn!(
-                                "timeout waiting for service to become reachable. actor may or may not receive messages."
-                            ),
-                        };
+            Ok(Some(_)) => tracing::info!("onion service is fully reachable."),
+            Ok(None) => tracing::warn!("status stream ended unexpectedly."),
+            Err(_) => tracing::warn!(
+                "timeout waiting for service to become reachable. actor may or may not receive messages."
+            ),
+        };
 
         if self.port.is_none() {
             let port = self.port.unwrap_or(

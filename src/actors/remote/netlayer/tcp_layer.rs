@@ -118,7 +118,7 @@ impl std::error::Error for TcpError {}
 mod tests {
     use std::time::Duration;
 
-    use crate::actors::remote::netlayer::{tcp_layer::TcpNetLayer, NetLayer};
+    use crate::actors::remote::netlayer::{NetLayer, tcp_layer::TcpNetLayer};
 
     #[tokio::test]
     async fn listen() {

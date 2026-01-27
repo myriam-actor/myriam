@@ -5,14 +5,14 @@
 use std::fmt::Display;
 
 use dencoder::Dencoder;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use tokio::sync::{mpsc, oneshot};
 
 use crate::messaging::{Message, MsgError, MsgResult};
 
 use super::{
-    local::{self, LocalHandle},
     Actor,
+    local::{self, LocalHandle},
 };
 
 pub mod address;
@@ -246,7 +246,7 @@ mod tests {
 
     use crate::{
         actors::{
-            remote::dencoder::{bitcode::BitcodeDencoder, Dencoder},
+            remote::dencoder::{Dencoder, bitcode::BitcodeDencoder},
             tests::*,
         },
         messaging::{Message, MsgError, MsgResult, Reply},

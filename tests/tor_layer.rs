@@ -9,13 +9,13 @@ use std::fmt::Display;
 
 use myriam::{
     actors::{
+        Actor,
         remote::{
             dencoder::bitcode::BitcodeDencoder,
             netlayer::tor_layer::TorLayer,
             router::{RemoteHandle, Router, RouterOpts},
             spawn_untyped,
         },
-        Actor,
     },
     messaging::{Message, Reply},
 };

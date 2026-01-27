@@ -24,7 +24,7 @@ impl Dencoder for BitcodeDencoder {
 mod tests {
     use serde::{Deserialize, Serialize};
 
-    use crate::actors::remote::dencoder::{bitcode::BitcodeDencoder, Dencoder};
+    use crate::actors::remote::dencoder::{Dencoder, bitcode::BitcodeDencoder};
 
     const TEST_STRING: &str = "a ü string ⅞123";
 

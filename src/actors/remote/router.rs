@@ -26,10 +26,10 @@
 
 use std::{collections::HashMap, fmt::Display, marker::PhantomData, sync::Arc, time::Duration};
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    sync::{mpsc, oneshot, RwLock},
+    sync::{RwLock, mpsc, oneshot},
 };
 
 use crate::{
