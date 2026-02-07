@@ -4,7 +4,7 @@
 
 use std::{fmt::Display, str::FromStr};
 
-use rand::{Rng, RngCore};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use super::netlayer::NetLayer;
@@ -32,11 +32,8 @@ impl ActorAddress {
         let proto_id = N::name();
         let mut bytes = [0u8; 32];
 
-        let mut rng = rand::thread_rng();
-        rng.try_fill(&mut bytes).map_err(|err| {
-            tracing::error!("could not fill ID buffer - {err}");
-            Error::Id
-        })?;
+        let mut rng = rand::rng();
+        rng.fill(&mut bytes);
 
         Ok(Self {
             proto_id: proto_id.to_owned(),
@@ -141,10 +138,10 @@ pub struct PeerId(Vec<u8>);
 impl PeerId {
     /// generate a new random PeerId
     pub fn new() -> Result<Self, Error> {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let mut buffer = [0u8; 32];
-        rng.fill_bytes(&mut buffer);
+        rng.fill(&mut buffer);
 
         Ok(Self(buffer.to_vec()))
     }
