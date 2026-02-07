@@ -10,7 +10,7 @@ let (local_handle, untyped_handle)
     = remote::spawn_untyped::<_, _, _, BitcodeDencoder>(Mult { a: 3 }).await?;
 
 // create router with a TOR netlayer
-let layer = TorLayer::new("myriam-foo".to_string(), 8081).await?;
+let layer = TorLayer::new("myriam-foo".to_string(), TorLayerConfig::new_from_port(8081)).await?;
 
 let router_handle = Router::with_netlayer(layer, Some(RouterOpts::default())).await?;
 

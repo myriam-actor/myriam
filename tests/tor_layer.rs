@@ -11,8 +11,9 @@ use myriam::{
     actors::{
         Actor,
         remote::{
+            address::PeerId,
             dencoder::bitcode::BitcodeDencoder,
-            netlayer::tor_layer::TorLayer,
+            netlayer::tor_layer::{TorLayer, TorLayerConfig, TorLayerDirectories},
             router::{RemoteHandle, Router, RouterOpts},
             spawn_untyped,
         },
@@ -26,12 +27,19 @@ use serde::{Deserialize, Serialize};
 async fn roundtrip() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt().init();
 
-    let tor_layer = TorLayer::new("actor-1".to_string(), 2050).await?;
+    let peer_id = PeerId::new()?;
+    let tor_dir = TorLayerDirectories::new(
+        format!("/tmp/myriam/test/{peer_id}/state"),
+        format!("/tmp/myriam/test/{peer_id}/cache"),
+    );
+
+    let tor_layer =
+        TorLayer::new("actor-1".to_string(), TorLayerConfig::new(2050, tor_dir)).await?;
     let (_, untyped) = spawn_untyped::<_, _, _, BitcodeDencoder>(Mult { a: 15 }).await?;
 
     let router_opts = RouterOpts::new(60_000, 5_000);
     let router_handle = Router::with_netlayer(tor_layer, Some(router_opts)).await?;
-    let address = router_handle.attach(untyped).await?;
+    let address = router_handle.attach_with_id(untyped, peer_id).await?;
 
     tracing::info!("our address is {address}");
 

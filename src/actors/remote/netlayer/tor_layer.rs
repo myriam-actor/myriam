@@ -5,6 +5,7 @@
 use std::sync::Arc;
 use std::{fmt::Display, time::Duration};
 
+use arti_client::config::TorClientConfigBuilder;
 use arti_client::{TorClient, TorClientConfig};
 use futures::lock::Mutex;
 use futures::{Stream, StreamExt};
@@ -33,19 +34,77 @@ pub struct TorLayer {
     stream: Option<Arc<Mutex<Box<dyn Stream<Item = StreamRequest> + Send + Unpin>>>>,
 }
 
+///
+/// Tor layer configuration to be passed to the Tor client
+///
+#[derive(Debug)]
+pub struct TorLayerConfig {
+    port: u16,
+    directories: Option<TorLayerDirectories>,
+}
+
+impl TorLayerConfig {
+    /// create the desired configuration for this Tor layer
+    pub fn new(port: u16, directories: TorLayerDirectories) -> Self {
+        Self {
+            port,
+            directories: Some(directories),
+        }
+    }
+
+    /// create the configuration desired with only a port number
+    pub fn new_from_port(port: u16) -> Self {
+        Self {
+            port,
+            directories: None,
+        }
+    }
+}
+
+///
+/// Directories for custom key management
+///
+#[derive(Debug, Default)]
+pub struct TorLayerDirectories {
+    data_dir: String,
+    cache_dir: String,
+}
+
+impl TorLayerDirectories {
+    /// build directory info for this Tor layer
+    pub fn new(data_dir: String, cache_dir: String) -> Self {
+        Self {
+            data_dir,
+            cache_dir,
+        }
+    }
+}
+
 impl TorLayer {
     ///
     /// boostrap a Tor circuit ready for either making remote connections or creating a new Router
     ///
-    pub async fn new(nickname: String, port: u16) -> Result<Self, Error> {
-        let client = TorClient::create_bootstrapped(TorClientConfig::default())
+    pub async fn new(nickname: String, layer_config: TorLayerConfig) -> Result<Self, Error> {
+        let conf = if let Some(TorLayerDirectories {
+            data_dir,
+            cache_dir,
+        }) = layer_config.directories
+        {
+            TorClientConfigBuilder::from_directories(data_dir, cache_dir)
+                .build()
+                .map_err(|e| Error::Bootstrap(e.to_string()))?
+        } else {
+            TorClientConfig::default()
+        };
+
+        let client = TorClient::create_bootstrapped(conf)
             .await
             .map_err(|e| Error::Bootstrap(e.to_string()))?;
 
         Ok(Self {
             client,
             nickname,
-            port: Some(port),
+            port: Some(layer_config.port),
             address: None,
             service: None,
             stream: None,

@@ -3,7 +3,10 @@ use messaging::{Messenger, MessengerCmd};
 use models::{AppError, Report};
 use myriam::{
     actors::remote::{
-        self, dencoder::bitcode::BitcodeDencoder, netlayer::tor_layer::TorLayer, router::Router,
+        self,
+        dencoder::bitcode::BitcodeDencoder,
+        netlayer::tor_layer::{TorLayer, TorLayerConfig},
+        router::Router,
     },
     messaging::Message,
 };
@@ -30,7 +33,11 @@ async fn main() -> Result<()> {
         .parse()
         .map_err(|_| AppError::InvalidArg("not a valid port".to_string()))?;
 
-    let router = Router::with_netlayer(TorLayer::new(nickname.clone(), port).await?, None).await?;
+    let router = Router::with_netlayer(
+        TorLayer::new(nickname.clone(), TorLayerConfig::new_from_port(port)).await?,
+        None,
+    )
+    .await?;
 
     let (tui_sender, tui_receiver) = mpsc::channel::<Report>(1024);
 
