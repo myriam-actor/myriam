@@ -184,14 +184,10 @@ impl NetLayer for TorLayer {
             self.port.replace(port);
         }
 
-        let redacted = match service.onion_address() {
-            Some(a) => a,
-            None => {
-                return Err(Error::Init(
-                    "failed to query our own onion address".to_string(),
-                ));
-            }
-        };
+        let redacted = service.onion_address().ok_or(Error::Init(
+            "failed to query our own onion address".to_string(),
+        ))?;
+
         let address = format!(
             "{}:{}",
             redacted.display_unredacted(),
