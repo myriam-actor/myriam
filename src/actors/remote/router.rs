@@ -276,7 +276,7 @@ impl Default for RouterOpts {
 ///
 /// handle for router messaging
 ///
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RouterHandle {
     host_address: String,
     sender: mpsc::Sender<(RouterMessage, oneshot::Sender<Result<RouterReply, Error>>)>,
