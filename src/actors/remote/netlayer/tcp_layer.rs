@@ -15,7 +15,7 @@ use super::{AsyncMsgStream, NetLayer};
 ///
 /// Unencrypted! Do not use for anything sensitive!
 ///
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct TcpNetLayer {
     listener: Option<TcpListener>,
 }
@@ -28,12 +28,6 @@ impl TcpNetLayer {
         Self {
             listener: Option::None,
         }
-    }
-}
-
-impl Default for TcpNetLayer {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
