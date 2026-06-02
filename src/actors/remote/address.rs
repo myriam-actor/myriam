@@ -4,7 +4,7 @@
 
 use std::{fmt::Display, str::FromStr};
 
-use rand::Rng;
+use rand::RngExt;
 use serde::{Deserialize, Serialize};
 
 use super::netlayer::NetLayer;
