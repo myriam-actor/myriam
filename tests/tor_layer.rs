@@ -7,6 +7,7 @@
 
 use std::fmt::Display;
 
+use core::assert_matches;
 use myriam::{
     actors::{
         Actor,
@@ -48,7 +49,7 @@ async fn roundtrip() -> Result<(), Box<dyn std::error::Error>> {
         RemoteHandle::<u32, u32, SomeError, BitcodeDencoder, TorLayer>::new(&address, tor_layer);
 
     let response = remote_handle.send(Message::Task(3)).await??;
-    assert!(matches!(response, Reply::Task(45)));
+    assert_matches!(response, Reply::Task(45));
 
     Ok(())
 }

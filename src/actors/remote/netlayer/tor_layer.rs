@@ -24,7 +24,7 @@ use crate::utils;
 ///
 #[allow(missing_debug_implementations)]
 pub struct TorLayer {
-    client: TorClient<PreferredRuntime>,
+    client: Arc<TorClient<PreferredRuntime>>,
     nickname: String,
     port: Option<u16>,
     address: Option<String>,
